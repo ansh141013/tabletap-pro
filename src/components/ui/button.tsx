@@ -17,6 +17,9 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
         // Custom variants for TableTap
         hero: "bg-gradient-warm text-primary-foreground shadow-lg hover:shadow-glow hover:scale-[1.02] active:scale-[0.98]",
+        landingHero: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg hover:shadow-xl hover:-translate-y-1 font-semibold",
+        landingHeroOutline: "border-2 border-foreground/20 bg-transparent text-foreground hover:bg-foreground/5 hover:border-foreground/30 font-medium",
+        landingCta: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-xl hover:shadow-2xl hover:-translate-y-1 font-semibold text-base",
         "hero-outline": "border-2 border-primary bg-transparent text-primary hover:bg-primary/5",
         success: "bg-success text-success-foreground hover:bg-success/90 shadow-md",
         warning: "bg-warning text-warning-foreground hover:bg-warning/90 shadow-md",
@@ -38,7 +41,7 @@ const buttonVariants = cva(
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+  VariantProps<typeof buttonVariants> {
   asChild?: boolean;
 }
 

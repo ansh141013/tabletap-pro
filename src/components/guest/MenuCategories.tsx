@@ -17,7 +17,15 @@ export const MenuCategories = ({
 
   return (
     <ScrollArea className="w-full whitespace-nowrap mb-6">
-      <div className="flex gap-2 pb-2">
+      <div className="flex gap-2 pb-2 px-1">
+        <Button
+          variant={selectedCategory === null ? "default" : "outline"}
+          size="sm"
+          onClick={() => onSelectCategory(null as any)} // Using null for "All"
+          className="flex-shrink-0"
+        >
+          All
+        </Button>
         {categories.map((category) => (
           <Button
             key={category.id}

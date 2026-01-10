@@ -233,8 +233,8 @@ export const TablesPage = () => {
   };
 
   const getQRCodeUrl = (table: TableRow) => {
-    const baseUrl = window.location.origin;
-    return `${baseUrl}/menu/${restaurantId}?table=${table.id}`;
+    // Using the specific requested format
+    return `https://quicktap-dine.lovable.app/menu?r=${restaurantId}&t=${table.id}`;
   };
 
   const handleDownloadQR = (table: TableRow) => {
@@ -346,6 +346,10 @@ export const TablesPage = () => {
   };
 
   const openDeleteDialog = (table: TableRow) => {
+    if (table.is_locked) {
+      toast.error("Cannot delete table with active order. Please complete or cancel the order first.");
+      return;
+    }
     setSelectedTable(table);
     setIsDeleteDialogOpen(true);
   };

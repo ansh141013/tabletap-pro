@@ -23,11 +23,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { useWaiterCalls } from "@/hooks/useWaiterCalls";
 
 export const WaiterCallsPage = () => {
   const [activeTab, setActiveTab] = useState("pending");
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState("");
   const { waiterCalls, isLoading, dismissCall } = useWaiterCalls();
 
   const pendingCalls = waiterCalls.filter(call => call.status === "pending");
@@ -121,13 +123,12 @@ export const WaiterCallsPage = () => {
                     >
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
-                          <div className={`h-12 w-12 rounded-full flex items-center justify-center ${
-                            urgent && call.status === "pending"
-                              ? "bg-red-100 dark:bg-red-900/50"
-                              : call.status === "resolved"
+                          <div className={`h-12 w-12 rounded-full flex items-center justify-center ${urgent && call.status === "pending"
+                            ? "bg-red-100 dark:bg-red-900/50"
+                            : call.status === "resolved"
                               ? "bg-green-100 dark:bg-green-900/50"
                               : "bg-amber-100 dark:bg-amber-900/50"
-                          }`}>
+                            }`}>
                             {urgent && call.status === "pending" ? (
                               <AlertTriangle className="h-6 w-6 text-red-600" />
                             ) : call.status === "resolved" ? (
@@ -184,28 +185,56 @@ export const WaiterCallsPage = () => {
             <DialogTitle>Waiter Call History</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {waiterCalls.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                No waiter call history
-              </p>
-            ) : (
-              waiterCalls.map((call) => (
-                <div
-                  key={call.id}
-                  className="flex items-center justify-between p-4 border rounded-lg"
-                >
-                  <div>
-                    <p className="font-medium">Table {call.table_number}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {new Date(call.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                  <Badge variant={call.status === "resolved" ? "secondary" : "default"}>
-                    {call.status}
-                  </Badge>
-                </div>
-              ))
-            )}
+            <div className="flex gap-4">
+              <div className="relative flex-1">
+                <Filter className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Filter by table number..."
+                  className="pl-9"
+                  value={historyFilter}
+                  onChange={(e) => setHistoryFilter(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto space-y-2">
+              {waiterCalls.filter(c => c.table_number.toString().includes(historyFilter)).length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  No matching history found
+                </p>
+              ) : (
+                waiterCalls
+                  .filter(c => c.table_number.toString().includes(historyFilter))
+                  .map((call) => (
+                    <div
+                      key={call.id}
+                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/20 transition-colors"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={`h-8 w-8 rounded-full flex items-center justify-center ${call.status === 'resolved' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-amber-100 dark:bg-amber-900/30'
+                          }`}>
+                          {call.status === 'resolved' ? <Check className="h-4 w-4 text-green-600" /> : <Bell className="h-4 w-4 text-amber-600" />}
+                        </div>
+                        <div>
+                          <p className="font-medium">Table {call.table_number}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {new Date(call.created_at).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant={call.status === "resolved" ? "secondary" : "default"}>
+                          {call.status}
+                        </Badge>
+                        {call.resolved_at && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Resolved {formatTime(call.resolved_at)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>

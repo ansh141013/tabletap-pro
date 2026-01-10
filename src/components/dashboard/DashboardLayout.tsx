@@ -27,6 +27,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useWaiterCalls } from "@/hooks/useWaiterCalls";
+import { useAuth } from "@/hooks/useAuth";
 
 const navItems = [
   { icon: ClipboardList, label: "Orders", href: "/dashboard" },
@@ -48,13 +49,15 @@ export const DashboardLayout = () => {
 
   const pendingCalls = waiterCalls.filter(call => call.status === 'pending').length;
 
+  const { session, loading } = useAuth();
+
   useEffect(() => {
     const checkAuth = async () => {
+      if (loading) return;
+
       // Dev mode bypass - check if coming from dev skip
       const isDevMode = sessionStorage.getItem('devMode') === 'true';
-      
-      const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (!session && !isDevMode) {
         navigate('/login');
         return;
@@ -80,7 +83,7 @@ export const DashboardLayout = () => {
     };
 
     checkAuth();
-  }, [navigate]);
+  }, [session, loading, navigate]);
 
   const getPageTitle = () => {
     const item = navItems.find((item) => item.href === location.pathname);
@@ -89,12 +92,12 @@ export const DashboardLayout = () => {
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
-    
+
     // Clear local storage
     localStorage.clear();
-    
+
     const { error } = await supabase.auth.signOut();
-    
+
     if (error) {
       toast({
         title: "Error",
@@ -125,9 +128,8 @@ export const DashboardLayout = () => {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border transform transition-transform duration-200 lg:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border transform transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
@@ -140,6 +142,7 @@ export const DashboardLayout = () => {
             </div>
             <button
               onClick={() => setSidebarOpen(false)}
+              aria-label="Close sidebar"
               className="lg:hidden p-1 text-sidebar-foreground/70 hover:text-sidebar-foreground"
             >
               <X className="h-5 w-5" />
@@ -149,18 +152,17 @@ export const DashboardLayout = () => {
           {/* Navigation */}
           <nav className="flex-1 p-4 space-y-1">
             {navItems.map((item) => {
-              const isActive = location.pathname === item.href || 
+              const isActive = location.pathname === item.href ||
                 (item.href === "/dashboard" && location.pathname === "/dashboard");
               return (
                 <Link
                   key={item.href}
                   to={item.href}
                   onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors ${
-                    isActive
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent/50"
-                  }`}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors ${isActive
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                    }`}
                 >
                   <item.icon className="h-5 w-5" />
                   {item.label}
@@ -173,9 +175,9 @@ export const DashboardLayout = () => {
           <div className="p-4 border-t border-sidebar-border">
             <div className="flex items-center gap-3 mb-3">
               {restaurant?.logo_url ? (
-                <img 
-                  src={restaurant.logo_url} 
-                  alt="Restaurant logo" 
+                <img
+                  src={restaurant.logo_url}
+                  alt="Restaurant logo"
                   className="h-10 w-10 rounded-full object-cover"
                 />
               ) : (
@@ -192,9 +194,9 @@ export const DashboardLayout = () => {
                 </p>
               </div>
             </div>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               className="w-full justify-start text-sidebar-foreground/70 hover:text-destructive"
               onClick={() => setShowLogoutDialog(true)}
             >
@@ -213,6 +215,7 @@ export const DashboardLayout = () => {
             <div className="flex items-center gap-4">
               <button
                 onClick={() => setSidebarOpen(true)}
+                aria-label="Open sidebar"
                 className="lg:hidden p-2 text-muted-foreground hover:text-foreground"
               >
                 <Menu className="h-5 w-5" />
@@ -220,14 +223,14 @@ export const DashboardLayout = () => {
               <h1 className="text-xl md:text-2xl font-bold text-foreground">{getPageTitle()}</h1>
             </div>
             <div className="flex items-center gap-2 md:gap-4">
-              <Link 
-                to="/dashboard/calls" 
+              <Link
+                to="/dashboard/calls"
                 className="relative p-2 text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Bell className="h-5 w-5" />
                 {pendingCalls > 0 && (
-                  <Badge 
-                    variant="destructive" 
+                  <Badge
+                    variant="destructive"
                     className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
                   >
                     {pendingCalls}

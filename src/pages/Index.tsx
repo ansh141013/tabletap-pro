@@ -1,27 +1,37 @@
-import { Header } from "@/components/landing/Header";
-import { HeroSection } from "@/components/landing/HeroSection";
-import { ProblemsSection } from "@/components/landing/ProblemsSection";
-import { SolutionSection } from "@/components/landing/SolutionSection";
-import { HowItWorksSection } from "@/components/landing/HowItWorksSection";
-import { FeaturesSection } from "@/components/landing/FeaturesSection";
-import { TrustSection } from "@/components/landing/TrustSection";
-import { CTASection } from "@/components/landing/CTASection";
-import { Footer } from "@/components/landing/Footer";
+import Navbar from "@/components/new_landing/Navbar";
+import HeroSection from "@/components/new_landing/HeroSection";
+import ProblemsSection from "@/components/new_landing/ProblemsSection";
+import SolutionSection from "@/components/new_landing/SolutionSection";
+import ProductPreview from "@/components/new_landing/ProductPreview";
+import HowItWorks from "@/components/new_landing/HowItWorks";
+import ComparisonSection from "@/components/new_landing/ComparisonSection";
+import IntegrationsSection from "@/components/new_landing/IntegrationsSection";
+import PricingSection from "@/components/new_landing/PricingSection";
+import TestimonialsSection from "@/components/new_landing/TestimonialsSection";
+import FAQSection from "@/components/new_landing/FAQSection";
+import ContactSection from "@/components/new_landing/ContactSection";
+import CTASection from "@/components/new_landing/CTASection";
+import Footer from "@/components/new_landing/Footer";
+import ScrollButton from "@/components/new_landing/ScrollButton";
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <main>
-        <HeroSection />
-        <ProblemsSection />
-        <SolutionSection />
-        <HowItWorksSection />
-        <FeaturesSection />
-        <TrustSection />
-        <CTASection />
-      </main>
+    <div className="landing-page-theme min-h-screen bg-background">
+      <Navbar />
+      <HeroSection />
+      <ProblemsSection />
+      <SolutionSection />
+      <ProductPreview />
+      <HowItWorks />
+      <ComparisonSection />
+      <IntegrationsSection />
+      <PricingSection />
+      <TestimonialsSection />
+      <FAQSection />
+      <ContactSection />
+      <CTASection />
       <Footer />
+      <ScrollButton />
     </div>
   );
 };

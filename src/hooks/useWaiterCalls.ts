@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { createNotificationSound } from "@/utils/notificationSound";
 
 export interface WaiterCall {
   id: string;
@@ -68,6 +69,8 @@ export function useWaiterCalls() {
 
   // Real-time subscription
   useEffect(() => {
+    const playSound = createNotificationSound();
+
     const channel = supabase
       .channel("waiter-calls-changes")
       .on(
@@ -81,7 +84,14 @@ export function useWaiterCalls() {
           if (payload.eventType === "INSERT") {
             const newCall = payload.new as WaiterCall;
             setWaiterCalls((prev) => [newCall, ...prev]);
-            
+
+            // Play sound
+            try {
+              playSound();
+            } catch (e) {
+              console.error("Audio play failed", e);
+            }
+
             toast({
               title: "🔔 Waiter Call!",
               description: `Table ${newCall.table_number} needs assistance`,

@@ -15,7 +15,8 @@ import {
   Image as ImageIcon,
   Loader2,
   Save,
-  X
+  X,
+  FileDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -210,7 +211,55 @@ export const MenuPage = () => {
     }
   };
 
-  const handleCreateItem = async () => {
+  const handleDuplicateItem = async (item: MenuItem) => {
+    if (isDevMode) {
+      toast.success("Mock item duplicated");
+      return;
+    }
+
+    try {
+      if (!restaurantId) return;
+
+      const newName = `${item.name} (Copy)`;
+
+      // We reuse the same image URL for the copy since it's a duplicate
+      const { error } = await supabase.from("menu_items").insert({
+        restaurant_id: restaurantId,
+        category_id: item.category_id,
+        name: newName,
+        description: item.description,
+        price: item.price,
+        image_url: item.image_url,
+        available: item.available
+      });
+
+      if (error) throw error;
+      toast.success("Item duplicated successfully");
+      window.location.reload();
+    } catch (error: any) {
+      toast.error("Failed to duplicate item: " + error.message);
+    }
+  };
+
+  const handleEditItem = (item: MenuItem) => {
+    // Current implementation doesn't have an edit dialog state/logic fully separated.
+    // I will reuse the Add Item dialog logic but need to refactor it to support editing or add a new dialog.
+    // For simplicity given the file size, I'll add a separate edit flow or update the existing dialog to be "Add/Edit".
+    // Let's implement the Edit logic by populating the existing Add dialog and changing the submit handler or adding an ID.
+    setNewItemName(item.name);
+    setNewItemDescription(item.description || "");
+    setNewItemPrice(item.price.toString());
+    setNewItemCategory(item.category_id);
+    // Image handling for edit is complex if we want to show preview of existing.
+    // Ideally we need a separate state 'editingItem' to track if we are editing.
+    setEditingItem(item);
+    setIsAddItemDialogOpen(true);
+  };
+
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+
+  const handleSaveItem = async () => {
+    // Centralized save handler for both Create and Update
     if (!newItemName || !newItemPrice || !newItemCategory) {
       toast.error("Please fill in all required fields");
       return;
@@ -218,21 +267,20 @@ export const MenuPage = () => {
     setIsSubmitting(true);
 
     try {
-      let imageUrl = null;
+      let imageUrl = editingItem?.image_url; // Default to existing if editing
 
       if (isDevMode) {
-        toast.success("Mock item created");
-        // Update local state for immediate feedback
+        toast.success(editingItem ? "Mock item updated" : "Mock item created");
       } else {
         if (!restaurantId) return;
 
-        // Image Upload
+        // Image Upload if a new file is selected
         if (newItemImage) {
           const fileExt = newItemImage.name.split('.').pop();
           const fileName = `${restaurantId}/${Math.random()}.${fileExt}`;
 
           const { error: uploadError } = await supabase.storage
-            .from('menu-items') // Ensure this bucket exists in Phase 1
+            .from('menu-items')
             .upload(fileName, newItemImage);
 
           if (uploadError) throw uploadError;
@@ -244,19 +292,35 @@ export const MenuPage = () => {
           imageUrl = publicUrl;
         }
 
-        const { error } = await supabase.from("menu_items").insert({
-          restaurant_id: restaurantId,
-          category_id: newItemCategory,
-          name: newItemName,
-          description: newItemDescription,
-          price: parseFloat(newItemPrice),
-          image_url: imageUrl,
-          available: true
-        });
+        if (editingItem) {
+          // Update existing
+          const { error } = await supabase.from("menu_items").update({
+            category_id: newItemCategory,
+            name: newItemName,
+            description: newItemDescription,
+            price: parseFloat(newItemPrice),
+            image_url: imageUrl,
+            // available status is handled separately usually, but we can update it here if we want 
+          }).eq('id', editingItem.id);
 
-        if (error) throw error;
-        toast.success("Item created successfully");
-        window.location.reload(); // Simple refresh for now
+          if (error) throw error;
+          toast.success("Item updated successfully");
+        } else {
+          // Insert new
+          const { error } = await supabase.from("menu_items").insert({
+            restaurant_id: restaurantId,
+            category_id: newItemCategory,
+            name: newItemName,
+            description: newItemDescription,
+            price: parseFloat(newItemPrice),
+            image_url: imageUrl,
+            available: true
+          });
+          if (error) throw error;
+          toast.success("Item created successfully");
+        }
+
+        window.location.reload();
       }
 
       setIsAddItemDialogOpen(false);
@@ -266,10 +330,11 @@ export const MenuPage = () => {
       setNewItemPrice("");
       setNewItemCategory("");
       setNewItemImage(null);
+      setEditingItem(null);
 
     } catch (error: any) {
-      console.error("Error creating item:", error);
-      toast.error("Failed to create item: " + error.message);
+      console.error("Error saving item:", error);
+      toast.error("Failed to save item: " + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -410,6 +475,7 @@ export const MenuPage = () => {
                     <Label htmlFor="category">Category *</Label>
                     <select
                       id="category"
+                      aria-label="Select Category"
                       className="w-full h-10 px-3 rounded-md border border-input bg-background"
                       value={newItemCategory}
                       onChange={(e) => setNewItemCategory(e.target.value)}
@@ -427,6 +493,7 @@ export const MenuPage = () => {
                     <input
                       type="file"
                       accept="image/*"
+                      aria-label="Upload item image"
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       onChange={(e) => {
                         if (e.target.files?.[0]) setNewItemImage(e.target.files[0]);
@@ -435,7 +502,7 @@ export const MenuPage = () => {
                     {newItemImage ? (
                       <div className="flex flex-col items-center">
                         <div className="h-12 w-12 rounded bg-muted overflow-hidden mb-2">
-                          <img src={URL.createObjectURL(newItemImage)} className="h-full w-full object-cover" />
+                          <img src={URL.createObjectURL(newItemImage)} alt="Preview of uploaded item" className="h-full w-full object-cover" />
                         </div>
                         <p className="text-sm truncate max-w-[200px]">{newItemImage.name}</p>
                         <Button variant="ghost" size="sm" onClick={(e) => {
@@ -456,8 +523,8 @@ export const MenuPage = () => {
                 <Button variant="outline" onClick={() => setIsAddItemDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleCreateItem} disabled={isSubmitting}>
-                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add Item"}
+                <Button onClick={handleSaveItem} disabled={isSubmitting}>
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : (editingItem ? "Update Item" : "Add Item")}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -571,9 +638,13 @@ export const MenuPage = () => {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleEditItem(item)}>
                                 <Edit className="h-4 w-4 mr-2" />
                                 Edit Item
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleDuplicateItem(item)}>
+                                <FileDown className="h-4 w-4 mr-2" />
+                                Duplicate Item
                               </DropdownMenuItem>
                               <DropdownMenuItem className="text-destructive">
                                 <Trash2 className="h-4 w-4 mr-2" />

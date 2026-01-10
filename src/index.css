@@ -7,7 +7,7 @@
 @layer base {
   :root {
     /* TableTap Design System - Warm, Professional Restaurant SaaS */
-    
+
     /* Core Colors */
     --background: 30 20% 99%;
     --foreground: 20 20% 12%;
@@ -21,7 +21,7 @@
     /* Primary - Warm Coral */
     --primary: 15 85% 57%;
     --primary-foreground: 0 0% 100%;
-    
+
     /* Secondary - Warm Sand */
     --secondary: 35 30% 95%;
     --secondary-foreground: 20 20% 20%;
@@ -47,10 +47,10 @@
     /* Custom tokens */
     --success: 142 76% 36%;
     --success-foreground: 0 0% 100%;
-    
+
     --warning: 38 92% 50%;
     --warning-foreground: 20 20% 12%;
-    
+
     --info: 199 89% 48%;
     --info-foreground: 0 0% 100%;
 
@@ -58,14 +58,14 @@
     --gradient-warm: linear-gradient(135deg, hsl(15 85% 57%) 0%, hsl(38 92% 50%) 100%);
     --gradient-soft: linear-gradient(180deg, hsl(30 20% 99%) 0%, hsl(30 15% 95%) 100%);
     --gradient-hero: linear-gradient(135deg, hsl(30 20% 99%) 0%, hsl(35 30% 96%) 50%, hsl(30 20% 99%) 100%);
-    
+
     /* Shadows */
     --shadow-sm: 0 1px 2px 0 hsl(20 20% 12% / 0.03);
     --shadow-md: 0 4px 6px -1px hsl(20 20% 12% / 0.05), 0 2px 4px -2px hsl(20 20% 12% / 0.03);
     --shadow-lg: 0 10px 15px -3px hsl(20 20% 12% / 0.08), 0 4px 6px -4px hsl(20 20% 12% / 0.03);
     --shadow-xl: 0 20px 25px -5px hsl(20 20% 12% / 0.08), 0 8px 10px -6px hsl(20 20% 12% / 0.03);
     --shadow-glow: 0 0 40px hsl(15 85% 57% / 0.15);
-    
+
     /* Sidebar */
     --sidebar-background: 30 15% 98%;
     --sidebar-foreground: 20 15% 30%;
@@ -117,6 +117,43 @@
   }
 }
 
+/* LANDING PAGE THEME OVERRIDES */
+@layer base {
+  .landing-page-theme {
+    --background: 0 0% 100%;
+    --foreground: 220 20% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 10%;
+    --primary: 16 85% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 20% 10%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 10% 46%;
+    --accent: 16 85% 60%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 16 85% 60%;
+    --radius: 0.75rem;
+    --surface: 220 20% 98%;
+    --surface-elevated: 0 0% 100%;
+    --text-primary: 220 20% 10%;
+    --text-secondary: 220 10% 40%;
+    --text-muted: 220 10% 55%;
+    --shadow-sm: 0 1px 2px 0 hsl(220 20% 10% / 0.03);
+    --shadow-md: 0 4px 6px -1px hsl(220 20% 10% / 0.05), 0 2px 4px -2px hsl(220 20% 10% / 0.05);
+    --shadow-lg: 0 10px 15px -3px hsl(220 20% 10% / 0.08), 0 4px 6px -4px hsl(220 20% 10% / 0.05);
+    --shadow-xl: 0 20px 25px -5px hsl(220 20% 10% / 0.1), 0 8px 10px -6px hsl(220 20% 10% / 0.1);
+    --shadow-soft: 0 8px 30px hsl(220 20% 10% / 0.08);
+    --gradient-hero: linear-gradient(135deg, hsl(220 20% 98%) 0%, hsl(220 14% 96%) 100%);
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -136,29 +173,65 @@
     @apply bg-clip-text text-transparent;
     background-image: var(--gradient-warm);
   }
-  
+
   .bg-gradient-warm {
     background-image: var(--gradient-warm);
   }
-  
+
   .bg-gradient-soft {
     background-image: var(--gradient-soft);
   }
-  
+
   .bg-gradient-hero {
     background-image: var(--gradient-hero);
   }
-  
+
   .shadow-glow {
     box-shadow: var(--shadow-glow);
   }
-  
+
   .glass {
     @apply bg-card/80 backdrop-blur-lg border border-border/50;
   }
-  
+
   .card-hover {
     @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
+  }
+
+  /* NEW LANDING PAGE UTILITIES */
+  .landing-page-theme .text-gradient-landing {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/80;
+  }
+
+  .card-elevated {
+    @apply bg-card rounded-2xl shadow-[var(--shadow-lg)] border border-border/50;
+  }
+
+  .card-soft {
+    @apply bg-surface-elevated rounded-xl shadow-[var(--shadow-md)] border border-border/30;
+  }
+
+  .bg-surface {
+    background-color: hsl(var(--surface));
+  }
+
+  .bg-surface-elevated {
+    background-color: hsl(var(--surface-elevated));
+  }
+
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+
+  .shadow-elevated {
+    box-shadow: var(--shadow-xl);
+  }
+
+  .grid-pattern {
+    background-image:
+      linear-gradient(hsl(var(--foreground)) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--foreground)) 1px, transparent 1px);
+    background-size: 60px 60px;
   }
 }
 
@@ -178,4 +251,103 @@
 
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-muted-foreground/50;
+}
+
+/* Animations from new landing page */
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes float-slow {
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-15px);
+  }
+}
+
+@keyframes slide-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes pulse-soft {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+.animate-float-slow {
+  animation: float-slow 6s ease-in-out infinite;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.6s ease-out forwards;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out forwards;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+.animation-delay-100 {
+  animation-delay: 100ms;
+}
+
+.animation-delay-200 {
+  animation-delay: 200ms;
+}
+
+.animation-delay-300 {
+  animation-delay: 300ms;
+}
+
+.animation-delay-500 {
+  animation-delay: 500ms;
+}
+
+.animation-delay-1000 {
+  animation-delay: 1000ms;
 }

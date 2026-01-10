@@ -13,6 +13,9 @@ import OwnerSetup from "./pages/OwnerSetup";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
 
+import CartPage from "./pages/CartPage";
+import CheckoutPage from "./pages/CheckoutPage";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -24,6 +27,8 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/menu/:restaurantId" element={<GuestMenu />} />
+          <Route path="/menu/:restaurantId/cart" element={<CartPage />} />
+          <Route path="/checkout/:restaurantId" element={<CheckoutPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />

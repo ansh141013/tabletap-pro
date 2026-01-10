@@ -16,7 +16,7 @@ const formatPrice = (price: number, currency: string) => {
   }).format(price);
 };
 
-export const MenuItemsList = ({ items, currency, onAddToCart }: MenuItemsListProps) => {
+export const MenuItemsList = ({ items, currency, onAddToCart, onItemClick }: { items: MenuItem[], currency: string, onAddToCart: (item: MenuItem, e: React.MouseEvent) => void, onItemClick: (item: MenuItem) => void }) => {
   if (items.length === 0) {
     return (
       <div className="text-center py-12">
@@ -26,39 +26,58 @@ export const MenuItemsList = ({ items, currency, onAddToCart }: MenuItemsListPro
   }
 
   return (
-    <div className="space-y-3">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {items.map((item) => (
-        <Card key={item.id} className="overflow-hidden">
-          <CardContent className="p-0">
-            <div className="flex gap-4">
-              {item.image_url && (
+        <Card
+          key={item.id}
+          className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow relative group"
+          onClick={() => item.available && onItemClick(item)}
+        >
+          {/* Unavailable Overlay */}
+          {!item.available && (
+            <div className="absolute inset-0 bg-background/80 z-20 flex items-center justify-center">
+              <span className="font-bold text-muted-foreground border-2 border-muted-foreground px-4 py-1 rounded-full transform -rotate-12">
+                SOLD OUT
+              </span>
+            </div>
+          )}
+
+          <CardContent className="p-0 h-full flex flex-col">
+            <div className="relative h-48 w-full bg-muted">
+              {item.image_url ? (
                 <img
                   src={item.image_url}
                   alt={item.name}
-                  className="w-24 h-24 object-cover flex-shrink-0"
+                  className="w-full h-full object-cover transition-transform group-hover:scale-105"
                 />
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground/50">No Image</div>
               )}
-              <div className="flex-1 py-3 pr-3 flex flex-col justify-between">
-                <div>
-                  <h3 className="font-semibold text-foreground">{item.name}</h3>
-                  {item.description && (
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {item.description}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center justify-between mt-2">
-                  <span className="font-semibold text-primary">
-                    {formatPrice(item.price, currency)}
-                  </span>
-                  <Button
-                    size="sm"
-                    onClick={() => onAddToCart(item)}
-                    className="h-8 w-8 p-0"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
+            </div>
+
+            <div className="p-4 flex-1 flex flex-col justify-between">
+              <div>
+                <h3 className="font-semibold text-lg line-clamp-1">{item.name}</h3>
+                <p className="text-sm text-muted-foreground line-clamp-2 mt-1 min-h-[2.5rem]">
+                  {item.description || "No description available."}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between mt-4 bg-muted/30 p-2 -mx-2 -mb-2 rounded-b-lg">
+                <span className="font-bold text-primary text-lg">
+                  {formatPrice(item.price, currency)}
+                </span>
+                <Button
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddToCart(item, e);
+                  }}
+                  className="rounded-full h-9 w-9 p-0 shadow-sm"
+                  disabled={!item.available}
+                >
+                  <Plus className="h-5 w-5" />
+                </Button>
               </div>
             </div>
           </CardContent>

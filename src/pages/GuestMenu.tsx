@@ -1,22 +1,26 @@
 import { useState, useEffect, useMemo } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { GuestHeader } from "@/components/guest/GuestHeader";
 import { MenuCategories } from "@/components/guest/MenuCategories";
 import { MenuItemsList } from "@/components/guest/MenuItemsList";
-import { CartSheet } from "@/components/guest/CartSheet";
 import { CallWaiterButton } from "@/components/guest/CallWaiterButton";
 import { MenuSearch } from "@/components/guest/MenuSearch";
 import { OrderTracker } from "@/components/guest/OrderTracker";
 import { Loader2 } from "lucide-react";
+import { useCart } from "@/hooks/useCart";
+import { MenuItemDetailModal } from "@/components/guest/MenuItemDetailModal";
+import { FloatingCartButton } from "@/components/guest/FloatingCartButton";
 
+// Exports shared types
 export interface CartItem {
   id: string;
   name: string;
   price: number;
   quantity: number;
   notes?: string;
+  image_url?: string | null;
 }
 
 export interface Restaurant {
@@ -48,33 +52,25 @@ const GuestMenu = () => {
   const [searchParams] = useSearchParams();
   const tableId = searchParams.get("table");
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [cart, setCart] = useState<CartItem[]>([]);
   const [tableNumber, setTableNumber] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Load cart from localStorage
-  useEffect(() => {
-    const savedCart = localStorage.getItem(`cart_${restaurantId}_${tableId}`);
-    if (savedCart) {
-      setCart(JSON.parse(savedCart));
-    }
-  }, [restaurantId, tableId]);
+  // Modal State
+  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Save cart to localStorage
-  useEffect(() => {
-    if (restaurantId && tableId) {
-      localStorage.setItem(`cart_${restaurantId}_${tableId}`, JSON.stringify(cart));
-    }
-  }, [cart, restaurantId, tableId]);
+  // Cart Hook
+  const { cart, addToCart, totalItems } = useCart(restaurantId, tableId);
 
-  // Fetch restaurant, table, categories, and menu items
+  // Fetch Logic
   useEffect(() => {
     const fetchData = async () => {
       if (!restaurantId) {
@@ -122,9 +118,7 @@ const GuestMenu = () => {
           .order("sort_order", { ascending: true });
 
         setCategories(categoriesData || []);
-        if (categoriesData && categoriesData.length > 0) {
-          setSelectedCategory(categoriesData[0].id);
-        }
+        // Don't auto select category, allow "All" (null) to be default
 
         // Fetch menu items
         const { data: menuData } = await supabase
@@ -144,42 +138,40 @@ const GuestMenu = () => {
     fetchData();
   }, [restaurantId, tableId]);
 
-  const addToCart = (item: MenuItem) => {
-    setCart((prev) => {
-      const existing = prev.find((c) => c.id === item.id);
-      if (existing) {
-        return prev.map((c) =>
-          c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c
-        );
-      }
-      return [...prev, { id: item.id, name: item.name, price: item.price, quantity: 1 }];
+  const handleQuickAdd = (item: MenuItem, e: React.MouseEvent) => {
+    // Add animation trigger here if needed (e.g. flying element)
+    addToCart({
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      quantity: 1,
+      image_url: item.image_url
     });
     toast({
       title: "Added to cart",
-      description: `${item.name} added to your order`,
+      description: `${item.name} (+1)`,
+      duration: 1500,
     });
   };
 
-  const updateCartItem = (itemId: string, quantity: number, notes?: string) => {
-    if (quantity <= 0) {
-      setCart((prev) => prev.filter((c) => c.id !== itemId));
-    } else {
-      setCart((prev) =>
-        prev.map((c) =>
-          c.id === itemId ? { ...c, quantity, notes: notes ?? c.notes } : c
-        )
-      );
-    }
-  };
-
-  const clearCart = () => {
-    setCart([]);
-    localStorage.removeItem(`cart_${restaurantId}_${tableId}`);
+  const handleModalAdd = (item: MenuItem, quantity: number, notes?: string) => {
+    addToCart({
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      quantity: quantity,
+      notes: notes,
+      image_url: item.image_url
+    });
+    toast({
+      title: "Added to cart",
+      description: `${item.name} (${quantity})`,
+    });
   };
 
   const filteredItems = useMemo(() => {
     let items = menuItems;
-    
+
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -189,14 +181,12 @@ const GuestMenu = () => {
           item.description?.toLowerCase().includes(query)
       );
     } else if (selectedCategory) {
-      // Only filter by category if not searching
+      // Only filter by category if not searching and category is selected
       items = items.filter((item) => item.category_id === selectedCategory);
     }
-    
+
     return items;
   }, [menuItems, searchQuery, selectedCategory]);
-
-  const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   if (loading) {
     return (
@@ -224,7 +214,7 @@ const GuestMenu = () => {
         tableNumber={tableNumber}
       />
 
-      <div className="container max-w-2xl mx-auto px-4 py-4">
+      <div className="container max-w-5xl mx-auto px-4 py-4">
         {tableNumber && (
           <OrderTracker
             restaurantId={restaurantId!}
@@ -233,7 +223,11 @@ const GuestMenu = () => {
           />
         )}
 
-        <MenuSearch searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+        <div className="flex flex-col md:flex-row gap-4 mb-6">
+          <div className="flex-1">
+            <MenuSearch searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+          </div>
+        </div>
 
         {!searchQuery && (
           <MenuCategories
@@ -251,10 +245,27 @@ const GuestMenu = () => {
           <MenuItemsList
             items={filteredItems}
             currency={restaurant.currency || "USD"}
-            onAddToCart={addToCart}
+            onAddToCart={handleQuickAdd}
+            onItemClick={(item) => {
+              setSelectedItem(item);
+              setIsModalOpen(true);
+            }}
           />
         )}
       </div>
+
+      <FloatingCartButton
+        count={totalItems}
+        onClick={() => navigate(`/menu/${restaurantId}/cart${tableId ? `?table=${tableId}` : ''}`)}
+      />
+
+      <MenuItemDetailModal
+        item={selectedItem}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onAddToCart={handleModalAdd}
+        currency={restaurant.currency || "USD"}
+      />
 
       {tableNumber && restaurantId && (
         <CallWaiterButton
@@ -263,17 +274,6 @@ const GuestMenu = () => {
           tableNumber={tableNumber}
         />
       )}
-
-      <CartSheet
-        cart={cart}
-        currency={restaurant.currency || "USD"}
-        total={cartTotal}
-        restaurantId={restaurantId!}
-        tableId={tableId}
-        tableNumber={tableNumber}
-        onUpdateItem={updateCartItem}
-        onClearCart={clearCart}
-      />
     </div>
   );
 };

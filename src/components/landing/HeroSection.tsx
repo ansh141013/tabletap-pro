@@ -73,18 +73,18 @@ export const HeroSection = () => {
               transition={{ delay: 0.4, duration: 0.6 }}
               className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
             >
-              <Button 
-                variant="hero" 
-                size="xl" 
+              <Button
+                variant="hero"
+                size="xl"
                 onClick={() => navigate('/owner-login')}
                 className="cursor-pointer transition-transform duration-200 hover:scale-105"
               >
                 Get Started Free
                 <ArrowRight className="h-5 w-5" />
               </Button>
-              <Button 
-                variant="hero-outline" 
-                size="xl" 
+              <Button
+                variant="hero-outline"
+                size="xl"
                 onClick={handleScrollToDemo}
                 className="cursor-pointer transition-transform duration-200 hover:scale-105"
               >

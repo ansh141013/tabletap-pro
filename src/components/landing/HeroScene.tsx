@@ -1,9 +1,9 @@
 import { Suspense, useRef, useState, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { 
-  Float, 
-  RoundedBox, 
-  Environment, 
+import {
+  Float,
+  RoundedBox,
+  Environment,
   PerspectiveCamera,
   MeshTransmissionMaterial,
   MeshReflectorMaterial,
@@ -15,7 +15,7 @@ import * as THREE from "three";
 // Hook to track mouse position in normalized coordinates
 function useMousePosition() {
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
-  
+
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
       // Normalize to -1 to 1 range
@@ -24,11 +24,11 @@ function useMousePosition() {
         y: -(event.clientY / window.innerHeight) * 2 + 1,
       });
     };
-    
+
     window.addEventListener("mousemove", handleMouseMove);
     return () => window.removeEventListener("mousemove", handleMouseMove);
   }, []);
-  
+
   return mouse;
 }
 
@@ -37,17 +37,17 @@ function PhoneModel({ mouseX, mouseY }: { mouseX: number; mouseY: number }) {
   const phoneRef = useRef<THREE.Group>(null);
   const screenRef = useRef<THREE.Mesh>(null);
   const targetRotation = useRef({ x: 0, y: 0 });
-  
+
   useFrame((state, delta) => {
     if (phoneRef.current) {
       // Calculate target rotation based on mouse position
       const baseRotationY = Math.sin(state.clock.elapsedTime * 0.3) * 0.08;
       const baseRotationX = Math.sin(state.clock.elapsedTime * 0.2) * 0.03 - 0.1;
-      
+
       // Add mouse-based tilt (stronger effect)
       targetRotation.current.x = baseRotationX + mouseY * 0.15;
       targetRotation.current.y = baseRotationY + mouseX * 0.25;
-      
+
       // Smooth interpolation for natural feel
       phoneRef.current.rotation.x = THREE.MathUtils.lerp(
         phoneRef.current.rotation.x,
@@ -71,38 +71,38 @@ function PhoneModel({ mouseX, mouseY }: { mouseX: number; mouseY: number }) {
       <group ref={phoneRef} position={[0, 0.2, 0]}>
         {/* Phone body - premium metal finish */}
         <RoundedBox args={[1.3, 2.6, 0.14]} radius={0.12} smoothness={8}>
-          <meshPhysicalMaterial 
-            color="#1a1a1a" 
-            metalness={0.95} 
+          <meshPhysicalMaterial
+            color="#1a1a1a"
+            metalness={0.95}
             roughness={0.15}
             clearcoat={1}
             clearcoatRoughness={0.1}
             reflectivity={1}
           />
         </RoundedBox>
-        
+
         {/* Phone frame accent */}
         <RoundedBox args={[1.32, 2.62, 0.13]} radius={0.13} smoothness={8} position={[0, 0, -0.005]}>
-          <meshPhysicalMaterial 
-            color="#2a2a2a" 
-            metalness={0.9} 
+          <meshPhysicalMaterial
+            color="#2a2a2a"
+            metalness={0.9}
             roughness={0.2}
           />
         </RoundedBox>
-        
+
         {/* Screen bezel */}
         <RoundedBox args={[1.15, 2.45, 0.02]} radius={0.1} smoothness={8} position={[0, 0, 0.075]}>
-          <meshPhysicalMaterial 
-            color="#0a0a0a" 
-            metalness={0.5} 
+          <meshPhysicalMaterial
+            color="#0a0a0a"
+            metalness={0.5}
             roughness={0.3}
           />
         </RoundedBox>
-        
+
         {/* Main screen - glowing display */}
         <mesh ref={screenRef} position={[0, 0, 0.086]}>
           <planeGeometry args={[1.08, 2.35]} />
-          <meshPhysicalMaterial 
+          <meshPhysicalMaterial
             color="#fefefe"
             emissive="#f5f5f5"
             emissiveIntensity={0.3}
@@ -110,34 +110,34 @@ function PhoneModel({ mouseX, mouseY }: { mouseX: number; mouseY: number }) {
             roughness={0.1}
           />
         </mesh>
-        
+
         {/* Status bar */}
         <mesh position={[0, 1.05, 0.09]}>
           <planeGeometry args={[1.0, 0.12]} />
           <meshBasicMaterial color="#ea580c" />
         </mesh>
-        
+
         {/* Notch */}
         <RoundedBox args={[0.35, 0.08, 0.02]} radius={0.02} smoothness={4} position={[0, 1.1, 0.09]}>
           <meshPhysicalMaterial color="#0a0a0a" metalness={0.8} roughness={0.2} />
         </RoundedBox>
-        
+
         {/* App header */}
         <mesh position={[0, 0.85, 0.09]}>
           <planeGeometry args={[1.0, 0.25]} />
           <meshBasicMaterial color="#f97316" />
         </mesh>
-        
+
         {/* Menu items with shadows */}
         {[0.45, 0.05, -0.35, -0.75].map((y, i) => (
           <group key={i}>
-            <RoundedBox 
-              args={[0.9, 0.28, 0.01]} 
-              radius={0.03} 
-              smoothness={4} 
+            <RoundedBox
+              args={[0.9, 0.28, 0.01]}
+              radius={0.03}
+              smoothness={4}
               position={[0, y, 0.09]}
             >
-              <meshPhysicalMaterial 
+              <meshPhysicalMaterial
                 color="#fff7ed"
                 metalness={0}
                 roughness={0.5}
@@ -150,19 +150,19 @@ function PhoneModel({ mouseX, mouseY }: { mouseX: number; mouseY: number }) {
             </mesh>
           </group>
         ))}
-        
+
         {/* Bottom navigation */}
         <mesh position={[0, -1.0, 0.09]}>
           <planeGeometry args={[1.0, 0.2]} />
           <meshBasicMaterial color="#fafafa" />
         </mesh>
-        
+
         {/* Camera lens reflection */}
         <mesh position={[0.4, 1.15, -0.075]} rotation={[Math.PI, 0, 0]}>
           <circleGeometry args={[0.06, 32]} />
-          <meshPhysicalMaterial 
-            color="#1a1a1a" 
-            metalness={1} 
+          <meshPhysicalMaterial
+            color="#1a1a1a"
+            metalness={1}
             roughness={0}
             clearcoat={1}
           />
@@ -173,17 +173,17 @@ function PhoneModel({ mouseX, mouseY }: { mouseX: number; mouseY: number }) {
 }
 
 // Glass-effect floating order cards
-function OrderCard({ 
-  position, 
-  delay, 
-  rotation = [0, 0, 0] 
-}: { 
-  position: [number, number, number]; 
+function OrderCard({
+  position,
+  delay,
+  rotation = [0, 0, 0]
+}: {
+  position: [number, number, number];
   delay: number;
   rotation?: [number, number, number];
 }) {
   const cardRef = useRef<THREE.Group>(null);
-  
+
   useFrame((state) => {
     if (cardRef.current) {
       cardRef.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 0.8 + delay) * 0.08;
@@ -213,25 +213,25 @@ function OrderCard({
             color="#ffffff"
           />
         </RoundedBox>
-        
+
         {/* Card content backing */}
         <mesh position={[0, 0, 0.018]}>
           <planeGeometry args={[0.75, 0.45]} />
-          <meshPhysicalMaterial 
-            color="#ffffff" 
-            transparent 
+          <meshPhysicalMaterial
+            color="#ffffff"
+            transparent
             opacity={0.85}
             metalness={0}
             roughness={0.3}
           />
         </mesh>
-        
+
         {/* Order status indicator */}
         <mesh position={[-0.28, 0.15, 0.025]}>
           <circleGeometry args={[0.04, 32]} />
           <meshBasicMaterial color="#22c55e" />
         </mesh>
-        
+
         {/* Text lines simulation */}
         <mesh position={[0.05, 0.15, 0.025]}>
           <planeGeometry args={[0.35, 0.04]} />
@@ -253,7 +253,7 @@ function OrderCard({
 // Wooden table with realistic texture
 function TableModel() {
   const tableRef = useRef<THREE.Group>(null);
-  
+
   useFrame((state) => {
     if (tableRef.current) {
       tableRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.1) * 0.02;
@@ -264,7 +264,7 @@ function TableModel() {
     <group ref={tableRef} position={[0, -1.6, -0.8]}>
       {/* Table top with wood grain effect */}
       <RoundedBox args={[3.2, 0.12, 2.2]} radius={0.03} smoothness={8} position={[0, 0, 0]}>
-        <meshPhysicalMaterial 
+        <meshPhysicalMaterial
           color="#92400e"
           metalness={0.05}
           roughness={0.75}
@@ -272,20 +272,20 @@ function TableModel() {
           clearcoatRoughness={0.4}
         />
       </RoundedBox>
-      
+
       {/* Table edge detail */}
       <RoundedBox args={[3.25, 0.08, 2.25]} radius={0.02} smoothness={4} position={[0, -0.08, 0]}>
-        <meshPhysicalMaterial 
+        <meshPhysicalMaterial
           color="#78350f"
           metalness={0.05}
           roughness={0.8}
         />
       </RoundedBox>
-      
+
       {/* QR code stand */}
       <group position={[1.1, 0.2, 0.6]}>
         <RoundedBox args={[0.25, 0.35, 0.08]} radius={0.02} smoothness={4}>
-          <meshPhysicalMaterial 
+          <meshPhysicalMaterial
             color="#1c1917"
             metalness={0.7}
             roughness={0.3}
@@ -301,28 +301,28 @@ function TableModel() {
           <meshBasicMaterial color="#1a1a1a" />
         </mesh>
       </group>
-      
+
       {/* Decorative plate */}
       <mesh position={[-0.9, 0.08, 0.3]} rotation={[-Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.3, 0.28, 0.02, 32]} />
-        <meshPhysicalMaterial 
+        <meshPhysicalMaterial
           color="#f5f5f4"
           metalness={0.1}
           roughness={0.3}
           clearcoat={0.8}
         />
       </mesh>
-      
+
       {/* Table legs - tapered modern style */}
       {[
-        [-1.3, -0.55, -0.85], 
-        [1.3, -0.55, -0.85], 
-        [-1.3, -0.55, 0.85], 
+        [-1.3, -0.55, -0.85],
+        [1.3, -0.55, -0.85],
+        [-1.3, -0.55, 0.85],
         [1.3, -0.55, 0.85]
       ].map((pos, i) => (
         <mesh key={i} position={pos as [number, number, number]}>
           <cylinderGeometry args={[0.04, 0.06, 1, 16]} />
-          <meshPhysicalMaterial 
+          <meshPhysicalMaterial
             color="#451a03"
             metalness={0.1}
             roughness={0.7}
@@ -373,30 +373,30 @@ function Scene({ mouseX, mouseY }: { mouseX: number; mouseY: number }) {
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 0.8, 5.5]} fov={40} />
-      
+
       {/* Ambient lighting */}
       <ambientLight intensity={0.4} />
-      
+
       {/* Key light - warm */}
-      <directionalLight 
-        position={[5, 8, 5]} 
-        intensity={1.2} 
-        castShadow 
+      <directionalLight
+        position={[5, 8, 5]}
+        intensity={1.2}
+        castShadow
         shadow-mapSize={[2048, 2048]}
         color="#fff5eb"
       />
-      
+
       {/* Fill light - cool */}
-      <directionalLight 
-        position={[-5, 3, -5]} 
-        intensity={0.4} 
+      <directionalLight
+        position={[-5, 3, -5]}
+        intensity={0.4}
         color="#e0f2fe"
       />
-      
+
       {/* Accent lights */}
       <pointLight position={[3, 2, 2]} intensity={0.8} color="#f97316" distance={8} />
       <pointLight position={[-3, 2, 2]} intensity={0.4} color="#fbbf24" distance={6} />
-      
+
       {/* Rim light */}
       <spotLight
         position={[0, 5, -3]}
@@ -405,27 +405,27 @@ function Scene({ mouseX, mouseY }: { mouseX: number; mouseY: number }) {
         intensity={0.6}
         color="#ffffff"
       />
-      
+
       <PhoneModel mouseX={mouseX} mouseY={mouseY} />
-      
+
       {/* Order cards with varied positions */}
       <OrderCard position={[1.9, 0.9, -0.3]} delay={0} rotation={[0, -0.15, 0.05]} />
       <OrderCard position={[2.1, 0.2, -0.1]} delay={1.5} rotation={[0, -0.2, -0.03]} />
       <OrderCard position={[1.85, -0.5, -0.2]} delay={3} rotation={[0, -0.1, 0.02]} />
-      
+
       <TableModel />
       <Particles />
       <Floor />
-      
+
       {/* Contact shadows for grounding */}
-      <ContactShadows 
-        position={[0, -2.68, 0]} 
-        opacity={0.4} 
-        scale={10} 
-        blur={2} 
+      <ContactShadows
+        position={[0, -2.68, 0]}
+        opacity={0.4}
+        scale={10}
+        blur={2}
         far={4}
       />
-      
+
       {/* HDR environment for realistic reflections */}
       <Environment preset="apartment" />
     </>
@@ -445,14 +445,14 @@ function Fallback() {
 
 export const HeroScene = () => {
   const mouse = useMousePosition();
-  
+
   return (
     <div className="w-full h-full min-h-[450px] md:min-h-[550px]">
       <Suspense fallback={<Fallback />}>
-        <Canvas 
-          shadows 
+        <Canvas
+          shadows
           dpr={[1, 2]}
-          gl={{ 
+          gl={{
             antialias: true,
             alpha: true,
             powerPreference: "high-performance"
