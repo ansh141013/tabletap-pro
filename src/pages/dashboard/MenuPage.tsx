@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
@@ -7,15 +6,11 @@ import {
   MoreVertical,
   Edit,
   Trash2,
-  Eye,
-  EyeOff,
   GripVertical,
   ChevronDown,
   ChevronRight,
   Image as ImageIcon,
   Loader2,
-  Save,
-  X,
   FileDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -44,31 +39,20 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner"; // Using sonner as seen in other files
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+import { getCategories, getMenuItems, addCategory, addMenuItem, updateMenuItem, deleteMenuItem, deleteCategory, uploadMenuItemImage } from "@/services/firebaseService";
+import { Category, MenuItem } from "@/types/models";
 
-interface MenuItem {
-  id: string;
-  name: string;
-  description: string | null;
-  price: number;
-  image_url?: string | null;
-  available: boolean;
-  category_id: string;
-}
-
-interface Category {
-  id: string;
-  name: string;
-  items: MenuItem[];
+// Helper interface to add UI state
+interface UICategory extends Category {
   isOpen?: boolean;
+  items: MenuItem[];
 }
 
 export const MenuPage = () => {
-  const { user } = useAuth();
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [restaurantId, setRestaurantId] = useState<string | null>(null);
+  const { userProfile } = useAuth();
+  const [categories, setCategories] = useState<UICategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -83,96 +67,35 @@ export const MenuPage = () => {
   const [newItemPrice, setNewItemPrice] = useState("");
   const [newItemCategory, setNewItemCategory] = useState("");
   const [newItemImage, setNewItemImage] = useState<File | null>(null);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
 
   // Form States (Category)
   const [newCategoryName, setNewCategoryName] = useState("");
 
-  const isDevMode = sessionStorage.getItem('devMode') === 'true';
+  const fetchData = async () => {
+    if (!userProfile?.restaurantId) return;
+    try {
+      const [cats, items] = await Promise.all([
+        getCategories(userProfile.restaurantId),
+        getMenuItems(userProfile.restaurantId)
+      ]);
+
+      const merged: UICategory[] = cats.map(cat => ({
+        ...cat,
+        isOpen: true,
+        items: items.filter(i => i.categoryId === cat.id)
+      }));
+      setCategories(merged);
+    } catch (err: any) {
+      toast.error("Failed to load menu: " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (isDevMode) {
-      // Mock Data
-      setRestaurantId("mock-restaurant-id");
-      setCategories([
-        {
-          id: "1", name: "Mock Appetizers", isOpen: true,
-          items: [
-            { id: "101", name: "Mock Fries", description: "Crispy", price: 5.99, available: true, category_id: "1" },
-            { id: "102", name: "Mock Wings", description: "Spicy", price: 12.99, available: false, category_id: "1" }
-          ]
-        },
-        {
-          id: "2", name: "Mock Mains", isOpen: false,
-          items: [
-            { id: "201", name: "Mock Burger", description: "Juicy", price: 15.99, available: true, category_id: "2" }
-          ]
-        }
-      ]);
-      setIsLoading(false);
-      return;
-    }
-
-    if (!user) return;
-
-    const fetchMenuData = async () => {
-      try {
-        // 1. Get Restaurant ID
-        const { data: restaurant } = await supabase
-          .from("restaurants")
-          .select("id")
-          .eq("owner_id", user.id)
-          .single();
-
-        if (!restaurant) throw new Error("Restaurant not found");
-        setRestaurantId(restaurant.id);
-
-        // 2. Get Categories
-        const { data: catsData, error: catsError } = await supabase
-          .from("categories")
-          .select("*")
-          .eq("restaurant_id", restaurant.id)
-          .order("sort_order", { ascending: true });
-
-        if (catsError) throw catsError;
-
-        // 3. Get Items
-        const { data: itemsData, error: itemsError } = await supabase
-          .from("menu_items")
-          .select("*")
-          .eq("restaurant_id", restaurant.id);
-
-        if (itemsError) throw itemsError;
-
-        // 4. Merge
-        const mergedCategories: Category[] = (catsData || []).map(cat => ({
-          id: cat.id,
-          name: cat.name,
-          isOpen: true, // Default open
-          items: (itemsData || [])
-            .filter(item => item.category_id === cat.id)
-            .map(item => ({
-              id: item.id,
-              name: item.name,
-              description: item.description,
-              price: item.price,
-              image_url: item.image_url,
-              available: item.available ?? true,
-              category_id: item.category_id
-            }))
-        }));
-
-        setCategories(mergedCategories);
-      } catch (error: any) {
-        console.error("Error loading menu:", error);
-        toast.error("Failed to load menu: " + error.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchMenuData();
-
-  }, [user, isDevMode]);
+    fetchData();
+  }, [userProfile]);
 
   const toggleCategory = (categoryId: string) => {
     setCategories(prev =>
@@ -183,27 +106,19 @@ export const MenuPage = () => {
   };
 
   const handleCreateCategory = async () => {
-    if (!newCategoryName) return;
+    if (!newCategoryName || !userProfile?.restaurantId) return;
     setIsSubmitting(true);
 
     try {
-      if (isDevMode) {
-        setCategories([...categories, { id: `mock-cat-${Date.now()}`, name: newCategoryName, items: [], isOpen: true }]);
-        toast.success("Mock category created");
-      } else {
-        if (!restaurantId) return;
-        const { error } = await supabase.from("categories").insert({
-          restaurant_id: restaurantId,
-          name: newCategoryName,
-          sort_order: categories.length
-        });
-        if (error) throw error;
-        toast.success("Category created");
-        // Reload page or refetch logic here... simpler to reload for now or optimistic update
-        window.location.reload();
-      }
-      setIsAddCategoryDialogOpen(false);
+      await addCategory({
+        restaurantId: userProfile.restaurantId,
+        name: newCategoryName,
+        displayOrder: categories.length
+      });
+      toast.success("Category created");
+      fetchData();
       setNewCategoryName("");
+      setIsAddCategoryDialogOpen(false);
     } catch (error: any) {
       toast.error("Failed to create category: " + error.message);
     } finally {
@@ -211,119 +126,85 @@ export const MenuPage = () => {
     }
   };
 
-  const handleDuplicateItem = async (item: MenuItem) => {
-    if (isDevMode) {
-      toast.success("Mock item duplicated");
-      return;
-    }
-
+  const handleDeleteCategory = async (categoryId: string) => {
     try {
-      if (!restaurantId) return;
+      await deleteCategory(categoryId);
+      toast.success("Category deleted");
+      fetchData();
+    } catch (error: any) {
+      toast.error("Failed to delete category");
+    }
+  };
 
+  const handleDuplicateItem = async (item: MenuItem) => {
+    if (!userProfile?.restaurantId) return;
+    try {
       const newName = `${item.name} (Copy)`;
-
-      // We reuse the same image URL for the copy since it's a duplicate
-      const { error } = await supabase.from("menu_items").insert({
-        restaurant_id: restaurantId,
-        category_id: item.category_id,
+      await addMenuItem({
+        restaurantId: userProfile.restaurantId,
+        categoryId: item.categoryId,
         name: newName,
-        description: item.description,
+        description: item.description || "",
         price: item.price,
-        image_url: item.image_url,
+        imageUrl: item.imageUrl || "",
         available: item.available
       });
 
-      if (error) throw error;
       toast.success("Item duplicated successfully");
-      window.location.reload();
+      fetchData();
     } catch (error: any) {
       toast.error("Failed to duplicate item: " + error.message);
     }
   };
 
   const handleEditItem = (item: MenuItem) => {
-    // Current implementation doesn't have an edit dialog state/logic fully separated.
-    // I will reuse the Add Item dialog logic but need to refactor it to support editing or add a new dialog.
-    // For simplicity given the file size, I'll add a separate edit flow or update the existing dialog to be "Add/Edit".
-    // Let's implement the Edit logic by populating the existing Add dialog and changing the submit handler or adding an ID.
     setNewItemName(item.name);
     setNewItemDescription(item.description || "");
     setNewItemPrice(item.price.toString());
-    setNewItemCategory(item.category_id);
-    // Image handling for edit is complex if we want to show preview of existing.
-    // Ideally we need a separate state 'editingItem' to track if we are editing.
+    setNewItemCategory(item.categoryId);
     setEditingItem(item);
     setIsAddItemDialogOpen(true);
   };
 
-  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-
   const handleSaveItem = async () => {
-    // Centralized save handler for both Create and Update
-    if (!newItemName || !newItemPrice || !newItemCategory) {
+    if (!newItemName || !newItemPrice || !newItemCategory || !userProfile?.restaurantId) {
       toast.error("Please fill in all required fields");
       return;
     }
     setIsSubmitting(true);
 
     try {
-      let imageUrl = editingItem?.image_url; // Default to existing if editing
+      let imageUrl = editingItem?.imageUrl || "";
 
-      if (isDevMode) {
-        toast.success(editingItem ? "Mock item updated" : "Mock item created");
-      } else {
-        if (!restaurantId) return;
-
-        // Image Upload if a new file is selected
-        if (newItemImage) {
-          const fileExt = newItemImage.name.split('.').pop();
-          const fileName = `${restaurantId}/${Math.random()}.${fileExt}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from('menu-items')
-            .upload(fileName, newItemImage);
-
-          if (uploadError) throw uploadError;
-
-          const { data: { publicUrl } } = supabase.storage
-            .from('menu-items')
-            .getPublicUrl(fileName);
-
-          imageUrl = publicUrl;
-        }
-
-        if (editingItem) {
-          // Update existing
-          const { error } = await supabase.from("menu_items").update({
-            category_id: newItemCategory,
-            name: newItemName,
-            description: newItemDescription,
-            price: parseFloat(newItemPrice),
-            image_url: imageUrl,
-            // available status is handled separately usually, but we can update it here if we want 
-          }).eq('id', editingItem.id);
-
-          if (error) throw error;
-          toast.success("Item updated successfully");
-        } else {
-          // Insert new
-          const { error } = await supabase.from("menu_items").insert({
-            restaurant_id: restaurantId,
-            category_id: newItemCategory,
-            name: newItemName,
-            description: newItemDescription,
-            price: parseFloat(newItemPrice),
-            image_url: imageUrl,
-            available: true
-          });
-          if (error) throw error;
-          toast.success("Item created successfully");
-        }
-
-        window.location.reload();
+      if (newItemImage) {
+        imageUrl = await uploadMenuItemImage(newItemImage, userProfile.restaurantId);
       }
 
+      if (editingItem) {
+        await updateMenuItem(editingItem.id!, {
+          categoryId: newItemCategory,
+          name: newItemName,
+          description: newItemDescription,
+          price: parseFloat(newItemPrice),
+          imageUrl: imageUrl,
+        });
+        toast.success("Item updated successfully");
+      } else {
+        await addMenuItem({
+          restaurantId: userProfile.restaurantId,
+          categoryId: newItemCategory,
+          name: newItemName,
+          description: newItemDescription,
+          price: parseFloat(newItemPrice),
+          imageUrl: imageUrl,
+          available: true,
+        });
+        toast.success("Item created successfully");
+      }
+
+      fetchData();
       setIsAddItemDialogOpen(false);
+
       // Reset form
       setNewItemName("");
       setNewItemDescription("");
@@ -341,30 +222,28 @@ export const MenuPage = () => {
   };
 
   const handleAvailabilityToggle = async (item: MenuItem) => {
-    if (isDevMode) {
-      toast.success("Mock availability toggled");
-      // Local update logic...
-      return;
-    }
-
     try {
-      const { error } = await supabase
-        .from("menu_items")
-        .update({ available: !item.available })
-        .eq("id", item.id);
-
-      if (error) throw error;
-
       // Optimistic update
       setCategories(prev => prev.map(cat => ({
         ...cat,
         items: cat.items.map(i => i.id === item.id ? { ...i, available: !i.available } : i)
       })));
 
+      await updateMenuItem(item.id!, { available: !item.available });
       toast.success(`Item marked as ${!item.available ? "available" : "unavailable"}`);
-
     } catch (error: any) {
       toast.error("Failed to update availability");
+      fetchData(); // Revert on error
+    }
+  };
+
+  const handleDeleteItem = async (itemId: string) => {
+    try {
+      await deleteMenuItem(itemId);
+      toast.success("Item deleted");
+      fetchData();
+    } catch (err: any) {
+      toast.error("Failed to delete item: " + err.message);
     }
   };
 
@@ -428,7 +307,17 @@ export const MenuPage = () => {
           </Dialog>
 
           {/* Add Item Dialog */}
-          <Dialog open={isAddItemDialogOpen} onOpenChange={setIsAddItemDialogOpen}>
+          <Dialog open={isAddItemDialogOpen} onOpenChange={(open) => {
+            if (!open) {
+              setEditingItem(null);
+              setNewItemName("");
+              setNewItemDescription("");
+              setNewItemPrice("");
+              setNewItemCategory("");
+              setNewItemImage(null);
+            }
+            setIsAddItemDialogOpen(open);
+          }}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
@@ -437,8 +326,8 @@ export const MenuPage = () => {
             </DialogTrigger>
             <DialogContent className="max-w-lg">
               <DialogHeader>
-                <DialogTitle>Add Menu Item</DialogTitle>
-                <DialogDescription>Add a new item to your menu.</DialogDescription>
+                <DialogTitle>{editingItem ? "Edit Menu Item" : "Add Menu Item"}</DialogTitle>
+                <DialogDescription>{editingItem ? "Update existing item details." : "Add a new item to your menu."}</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
@@ -502,13 +391,20 @@ export const MenuPage = () => {
                     {newItemImage ? (
                       <div className="flex flex-col items-center">
                         <div className="h-12 w-12 rounded bg-muted overflow-hidden mb-2">
-                          <img src={URL.createObjectURL(newItemImage)} alt="Preview of uploaded item" className="h-full w-full object-cover" />
+                          <img src={URL.createObjectURL(newItemImage)} alt="Preview" className="h-full w-full object-cover" />
                         </div>
                         <p className="text-sm truncate max-w-[200px]">{newItemImage.name}</p>
                         <Button variant="ghost" size="sm" onClick={(e) => {
                           e.preventDefault();
                           setNewItemImage(null);
                         }}>Remove</Button>
+                      </div>
+                    ) : editingItem?.imageUrl ? (
+                      <div className="flex flex-col items-center">
+                        <div className="h-12 w-12 rounded bg-muted overflow-hidden mb-2">
+                          <img src={editingItem.imageUrl} alt="Current" className="h-full w-full object-cover" />
+                        </div>
+                        <p className="text-sm text-muted-foreground">Current Image. Upload new to replace.</p>
                       </div>
                     ) : (
                       <>
@@ -562,7 +458,7 @@ export const MenuPage = () => {
             transition={{ delay: catIndex * 0.05 }}
             className="bg-card rounded-xl border border-border overflow-hidden"
           >
-            <Collapsible open={category.isOpen} onOpenChange={() => toggleCategory(category.id)}>
+            <Collapsible open={category.isOpen} onOpenChange={() => toggleCategory(category.id!)}>
               <CollapsibleTrigger asChild>
                 <div className="flex items-center justify-between p-4 hover:bg-muted/50 cursor-pointer transition-colors">
                   <div className="flex items-center gap-3">
@@ -586,7 +482,7 @@ export const MenuPage = () => {
                         <Edit className="h-4 w-4 mr-2" />
                         Edit Category
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive">
+                      <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteCategory(category.id!)}>
                         <Trash2 className="h-4 w-4 mr-2" />
                         Delete Category
                       </DropdownMenuItem>
@@ -605,8 +501,8 @@ export const MenuPage = () => {
                       >
                         <div className="flex items-center gap-4">
                           <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
-                            {item.image_url ? (
-                              <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
+                            {item.imageUrl ? (
+                              <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
                             ) : (
                               <ImageIcon className="h-5 w-5 text-muted-foreground" />
                             )}
@@ -646,7 +542,7 @@ export const MenuPage = () => {
                                 <FileDown className="h-4 w-4 mr-2" />
                                 Duplicate Item
                               </DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive">
+                              <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteItem(item.id!)}>
                                 <Trash2 className="h-4 w-4 mr-2" />
                                 Delete Item
                               </DropdownMenuItem>

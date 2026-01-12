@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const benefits = [
   "Free 14-day trial",
@@ -25,73 +25,40 @@ const Signup = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // Check if already logged in
+  const { signUp, signInWithGoogle, user, userProfile } = useAuth();
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+    if (user) {
+      if (!userProfile?.restaurantId) {
         navigate('/owner-setup');
+      } else {
+        navigate('/dashboard');
       }
-    });
-  }, [navigate]);
+    }
+  }, [user, userProfile, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: name,
-        },
-        emailRedirectTo: `${window.location.origin}/owner-setup`,
-      },
-    });
-
-    if (error) {
-      toast({
-        title: "Signup failed",
-        description: error.message,
-        variant: "destructive",
-      });
+    try {
+      await signUp(email, password, name);
+      // Navigation handled by useEffect
+    } catch (error: any) {
+      // Error toast handled in AuthContext
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    if (data.user) {
-      // Create profile
-      await supabase.from('profiles').insert({
-        user_id: data.user.id,
-        full_name: name,
-        email: email,
-      });
-
-      toast({
-        title: "Account created!",
-        description: "Redirecting to setup your restaurant...",
-      });
-
-      navigate('/owner-setup');
-    }
-    setIsLoading(false);
   };
 
   const handleGoogleSignup = async () => {
     setIsGoogleLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-
-    if (error) {
-      toast({
-        title: "Google signup failed",
-        description: error.message,
-        variant: "destructive",
-      });
+    try {
+      await signInWithGoogle();
+      // Navigation handled by useEffect
+    } catch (error) {
+      // Error handled in AuthContext
+    } finally {
       setIsGoogleLoading(false);
     }
   };
@@ -253,9 +220,9 @@ const Signup = () => {
           </div>
 
           {/* Social Signup */}
-          <Button 
-            variant="outline" 
-            size="lg" 
+          <Button
+            variant="outline"
+            size="lg"
             className="w-full"
             onClick={handleGoogleSignup}
             disabled={isGoogleLoading}

@@ -9,7 +9,6 @@ import {
   MoreVertical,
   Eye,
   X,
-  Plus,
   Volume2,
   Phone,
   User,
@@ -43,8 +42,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useOrders, OrderStatus, OrderItem } from "@/hooks/useOrders";
 import { useOrderNotifications } from "@/hooks/useOrderNotifications";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 const getStatusConfig = (status: OrderStatus) => {
   switch (status) {
@@ -67,11 +66,25 @@ const getStatusConfig = (status: OrderStatus) => {
   }
 };
 
-const formatTime = (dateString: string) => {
+const formatTime = (date: any) => {
   try {
-    return formatDistanceToNow(new Date(dateString), { addSuffix: true });
+    let d = date;
+    if (date?.toDate) d = date.toDate();
+    if (!d) return "Just now";
+    return formatDistanceToNow(new Date(d), { addSuffix: true });
   } catch {
     return "Just now";
+  }
+};
+
+const formatDate = (date: any) => {
+  try {
+    let d = date;
+    if (date?.toDate) d = date.toDate();
+    if (!d) return "Unknown";
+    return new Date(d).toLocaleString();
+  } catch {
+    return "Unknown";
   }
 };
 
@@ -82,17 +95,18 @@ export const OrdersPage = () => {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectOrderId, setRejectOrderId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
-  
-  const { orders, isLoading, loadingOrderId, updateOrderStatus, fetchOrderItems } = useOrders();
-  const { playNotificationSound } = useOrderNotifications();
+
+  const { userProfile } = useAuth();
+  const { orders, isLoading, loadingOrderId, updateOrderStatus, fetchOrderItems } = useOrders(userProfile?.restaurantId);
+  const { playNotificationSound } = useOrderNotifications(userProfile?.restaurantId || null);
   const { toast } = useToast();
 
-  const filteredOrders = activeTab === "all" 
-    ? orders 
+  const filteredOrders = activeTab === "all"
+    ? orders
     : orders.filter(order => {
-        if (activeTab === "active") return ["pending", "accepted", "preparing", "ready"].includes(order.status);
-        return order.status === activeTab;
-      });
+      if (activeTab === "active") return ["pending", "accepted", "preparing", "ready"].includes(order.status);
+      return order.status === activeTab;
+    });
 
   const handleToggleExpand = async (orderId: string) => {
     if (expandedOrderId === orderId) {
@@ -100,15 +114,19 @@ export const OrdersPage = () => {
     } else {
       setExpandedOrderId(orderId);
       if (!orderItems[orderId]) {
-        const items = await fetchOrderItems(orderId);
-        setOrderItems(prev => ({ ...prev, [orderId]: items }));
+        try {
+          const items = await fetchOrderItems(orderId);
+          setOrderItems(prev => ({ ...prev, [orderId]: items }));
+        } catch (error) {
+          console.error("Failed to fetch order items", error);
+        }
       }
     }
   };
 
   const handleRejectOrder = async () => {
     if (!rejectOrderId) return;
-    
+
     await updateOrderStatus(rejectOrderId, "cancelled");
     setShowRejectDialog(false);
     setRejectOrderId(null);
@@ -120,37 +138,11 @@ export const OrdersPage = () => {
     setShowRejectDialog(true);
   };
 
-  // Demo: Create a test order
-  const createTestOrder = async () => {
-    const testOrder = {
-      restaurant_id: "00000000-0000-0000-0000-000000000001",
-      table_number: Math.floor(Math.random() * 12) + 1,
-      customer_name: ["John D.", "Sarah M.", "Mike R.", "Anna K.", "Tom B."][Math.floor(Math.random() * 5)],
-      customer_phone: "+1 555-0100",
-      status: "pending",
-      total: Math.floor(Math.random() * 50) + 15,
-    };
-
-    const { error } = await supabase.from("orders").insert(testOrder);
-    
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to create test order",
-        variant: "destructive",
-      });
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Header with test buttons */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex gap-2">
-          <Button onClick={createTestOrder} size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            Test Order
-          </Button>
           <Button onClick={playNotificationSound} size="sm" variant="outline">
             <Volume2 className="h-4 w-4 mr-2" />
             Test Sound
@@ -199,10 +191,6 @@ export const OrdersPage = () => {
               ) : filteredOrders.length === 0 ? (
                 <div className="p-8 text-center text-muted-foreground">
                   <p className="mb-4">No orders found</p>
-                  <Button onClick={createTestOrder} variant="outline">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Test Order
-                  </Button>
                 </div>
               ) : (
                 filteredOrders.map((order, index) => {
@@ -224,29 +212,29 @@ export const OrdersPage = () => {
                           <div className="flex-1 space-y-2">
                             <div className="flex items-center gap-3 flex-wrap">
                               <span className="font-semibold text-foreground font-mono text-sm">
-                                #{order.id.slice(0, 8).toUpperCase()}
+                                #{order.id!.slice(0, 8).toUpperCase()}
                               </span>
                               <Badge variant="outline" className={statusConfig.color}>
                                 <statusConfig.icon className="h-3 w-3 mr-1" />
                                 {statusConfig.label}
                               </Badge>
                               <span className="text-sm text-muted-foreground">
-                                {formatTime(order.created_at)}
+                                {formatTime(order.createdAt)}
                               </span>
                             </div>
                             <div className="flex items-center gap-4 text-sm">
-                              <span className="font-medium text-foreground">Table {order.table_number}</span>
+                              <span className="font-medium text-foreground">Table {order.tableNumber}</span>
                               <span className="text-muted-foreground">•</span>
                               <span className="flex items-center gap-1 text-muted-foreground">
                                 <User className="h-3 w-3" />
-                                {order.customer_name}
+                                {order.customerName}
                               </span>
-                              {order.customer_phone && (
+                              {order.customerPhone && (
                                 <>
                                   <span className="text-muted-foreground">•</span>
                                   <span className="flex items-center gap-1 text-muted-foreground">
                                     <Phone className="h-3 w-3" />
-                                    {order.customer_phone}
+                                    {order.customerPhone}
                                   </span>
                                 </>
                               )}
@@ -258,13 +246,13 @@ export const OrdersPage = () => {
                             <span className="text-lg font-bold text-foreground">
                               ${Number(order.total || 0).toFixed(2)}
                             </span>
-                            
+
                             {order.status === "pending" && (
                               <div className="flex gap-2">
-                                <Button 
-                                  size="sm" 
+                                <Button
+                                  size="sm"
                                   className="bg-green-600 hover:bg-green-700"
-                                  onClick={() => updateOrderStatus(order.id, "accepted")}
+                                  onClick={() => updateOrderStatus(order.id!, "accepted")}
                                   disabled={isUpdating}
                                 >
                                   {isUpdating ? (
@@ -276,23 +264,23 @@ export const OrdersPage = () => {
                                     </>
                                   )}
                                 </Button>
-                                <Button 
-                                  size="sm" 
+                                <Button
+                                  size="sm"
                                   variant="outline"
                                   className="text-red-600 border-red-200 hover:bg-red-50"
-                                  onClick={() => openRejectDialog(order.id)}
+                                  onClick={() => openRejectDialog(order.id!)}
                                   disabled={isUpdating}
                                 >
                                   <X className="h-4 w-4" />
                                 </Button>
                               </div>
                             )}
-                            
+
                             {order.status === "accepted" && (
-                              <Button 
-                                size="sm" 
+                              <Button
+                                size="sm"
                                 className="bg-orange-500 hover:bg-orange-600"
-                                onClick={() => updateOrderStatus(order.id, "preparing")}
+                                onClick={() => updateOrderStatus(order.id!, "preparing")}
                                 disabled={isUpdating}
                               >
                                 {isUpdating ? (
@@ -305,12 +293,12 @@ export const OrdersPage = () => {
                                 )}
                               </Button>
                             )}
-                            
+
                             {order.status === "preparing" && (
-                              <Button 
-                                size="sm" 
+                              <Button
+                                size="sm"
                                 className="bg-green-600 hover:bg-green-700"
-                                onClick={() => updateOrderStatus(order.id, "ready")}
+                                onClick={() => updateOrderStatus(order.id!, "ready")}
                                 disabled={isUpdating}
                               >
                                 {isUpdating ? (
@@ -323,12 +311,12 @@ export const OrdersPage = () => {
                                 )}
                               </Button>
                             )}
-                            
+
                             {order.status === "ready" && (
-                              <Button 
-                                size="sm" 
+                              <Button
+                                size="sm"
                                 variant="outline"
-                                onClick={() => updateOrderStatus(order.id, "served")}
+                                onClick={() => updateOrderStatus(order.id!, "served")}
                                 disabled={isUpdating}
                               >
                                 {isUpdating ? (
@@ -345,7 +333,7 @@ export const OrdersPage = () => {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => handleToggleExpand(order.id)}
+                              onClick={() => handleToggleExpand(order.id!)}
                             >
                               {isExpanded ? (
                                 <ChevronUp className="h-4 w-4" />
@@ -361,14 +349,14 @@ export const OrdersPage = () => {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleToggleExpand(order.id)}>
+                                <DropdownMenuItem onClick={() => handleToggleExpand(order.id!)}>
                                   <Eye className="h-4 w-4 mr-2" />
                                   View Details
                                 </DropdownMenuItem>
                                 {!["cancelled", "auto_cancelled", "served"].includes(order.status) && (
-                                  <DropdownMenuItem 
+                                  <DropdownMenuItem
                                     className="text-red-600"
-                                    onClick={() => openRejectDialog(order.id)}
+                                    onClick={() => openRejectDialog(order.id!)}
                                   >
                                     <XCircle className="h-4 w-4 mr-2" />
                                     Cancel Order
@@ -393,10 +381,11 @@ export const OrdersPage = () => {
                               <div className="grid md:grid-cols-2 gap-4">
                                 <div>
                                   <h4 className="font-medium text-foreground mb-2">Order Items</h4>
-                                  {orderItems[order.id]?.length > 0 ? (
+                                  {/* Check if items are directly in order or in separate state */}
+                                  {(order.items?.length || orderItems[order.id!]?.length) ? (
                                     <div className="space-y-2">
-                                      {orderItems[order.id].map((item) => (
-                                        <div key={item.id} className="flex justify-between text-sm">
+                                      {(order.items || orderItems[order.id!]).map((item: any, i: number) => (
+                                        <div key={item.id || i} className="flex justify-between text-sm">
                                           <span>
                                             {item.quantity}x {item.name}
                                           </span>
@@ -413,12 +402,12 @@ export const OrdersPage = () => {
                                 <div>
                                   <h4 className="font-medium text-foreground mb-2">Order Details</h4>
                                   <div className="space-y-1 text-sm">
-                                    <p><span className="text-muted-foreground">Customer:</span> {order.customer_name}</p>
-                                    {order.customer_phone && (
-                                      <p><span className="text-muted-foreground">Phone:</span> {order.customer_phone}</p>
+                                    <p><span className="text-muted-foreground">Customer:</span> {order.customerName}</p>
+                                    {order.customerPhone && (
+                                      <p><span className="text-muted-foreground">Phone:</span> {order.customerPhone}</p>
                                     )}
-                                    <p><span className="text-muted-foreground">Table:</span> #{order.table_number}</p>
-                                    <p><span className="text-muted-foreground">Created:</span> {new Date(order.created_at).toLocaleString()}</p>
+                                    <p><span className="text-muted-foreground">Table:</span> #{order.tableNumber}</p>
+                                    <p><span className="text-muted-foreground">Created:</span> {formatDate(order.createdAt)}</p>
                                     {order.notes && (
                                       <p><span className="text-muted-foreground">Notes:</span> {order.notes}</p>
                                     )}
@@ -463,8 +452,8 @@ export const OrdersPage = () => {
             <Button variant="outline" onClick={() => setShowRejectDialog(false)}>
               Cancel
             </Button>
-            <Button 
-              variant="destructive" 
+            <Button
+              variant="destructive"
               onClick={handleRejectOrder}
               disabled={loadingOrderId === rejectOrderId}
             >

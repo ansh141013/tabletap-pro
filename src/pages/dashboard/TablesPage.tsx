@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Plus,
@@ -11,6 +12,7 @@ import {
   Trash2,
   Download,
   FileDown,
+  Palette,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import { Button } from "@/components/ui/button";
@@ -42,14 +44,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
-import type { Tables } from "@/integrations/supabase/types";
+import { Table } from "@/types/models";
+import { addTable, updateTable, deleteTable, getTables } from "@/services/firebaseService";
 
-type TableRow = Tables<"tables">;
-type TableStatus = "available" | "occupied" | "locked" | "reserved";
+// Map types
+export type TableRow = Table;
 
 const getStatusConfig = (status: string | null, isLocked: boolean | null) => {
   if (isLocked) {
@@ -68,7 +70,8 @@ const getStatusConfig = (status: string | null, isLocked: boolean | null) => {
 };
 
 export const TablesPage = () => {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
+  const navigate = useNavigate();
   const [tables, setTables] = useState<TableRow[]>([]);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,155 +89,92 @@ export const TablesPage = () => {
 
   const qrRef = useRef<HTMLDivElement>(null);
 
-  // Mock data generator
-  const generateMockTables = (): TableRow[] => Array.from({ length: 8 }).map((_, i) => ({
-    id: `table-${i + 1}`,
-    restaurant_id: "00000000-0000-0000-0000-000000000001",
-    table_number: i + 1,
-    capacity: 4,
-    is_locked: i === 2, // Mock one locked table
-    status: ["available", "occupied", "available", "reserved"][i % 4] || "available",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }));
-
   // Fetch restaurant and tables
   useEffect(() => {
-    const isDevMode = sessionStorage.getItem('devMode') === 'true';
-
-    if (isDevMode) {
-      setRestaurantId("00000000-0000-0000-0000-000000000001");
-      setTables(generateMockTables());
+    // If we have restaurantId from userProfile, use it
+    if (userProfile?.restaurantId) {
+      setRestaurantId(userProfile.restaurantId);
+      getTables(userProfile.restaurantId).then((data) => {
+        setTables(data);
+        setIsLoading(false);
+      }).catch(err => {
+        console.error(err);
+        toast.error("Failed to load tables");
+        setIsLoading(false);
+      });
+    } else {
       setIsLoading(false);
-      return;
     }
-
-    if (!user) return;
-
-    const fetchData = async () => {
-      // Get restaurant
-      const { data: restaurant } = await supabase
-        .from("restaurants")
-        .select("id")
-        .eq("owner_id", user.id)
-        .single();
-
-      if (restaurant) {
-        setRestaurantId(restaurant.id);
-
-        // Get tables
-        const { data: tablesData, error } = await supabase
-          .from("tables")
-          .select("*")
-          .eq("restaurant_id", restaurant.id)
-          .order("table_number", { ascending: true });
-
-        if (error) {
-          toast.error("Failed to load tables");
-        } else {
-          setTables(tablesData || []);
-        }
-      }
-      setIsLoading(false);
-    };
-
-    fetchData();
-
-    // Realtime subscription
-    const channel = supabase
-      .channel("tables-changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "tables" },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            setTables(prev => [...prev, payload.new as TableRow].sort((a, b) => a.table_number - b.table_number));
-          } else if (payload.eventType === "UPDATE") {
-            setTables(prev => prev.map(t => t.id === payload.new.id ? payload.new as TableRow : t));
-          } else if (payload.eventType === "DELETE") {
-            setTables(prev => prev.filter(t => t.id !== payload.old.id));
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user]);
+  }, [userProfile]);
 
   const handleAddTable = async () => {
     if (!restaurantId || !newTableNumber) return;
 
-    const { error } = await supabase.from("tables").insert({
-      restaurant_id: restaurantId,
-      table_number: parseInt(newTableNumber),
-      capacity: parseInt(newTableSeats) || 4,
-    });
-
-    if (error) {
-      toast.error("Failed to add table");
-    } else {
+    try {
+      const tableData = {
+        restaurantId,
+        number: newTableNumber,
+        seats: parseInt(newTableSeats) || 4,
+        status: "available" as const,
+        isLocked: false
+      };
+      const newTable = await addTable(tableData);
+      setTables([...tables, newTable]);
       toast.success("Table added successfully");
       setIsAddDialogOpen(false);
       setNewTableNumber("");
       setNewTableSeats("4");
+    } catch (e) {
+      toast.error("Failed to add table");
     }
   };
 
   const handleEditTable = async () => {
     if (!selectedTable) return;
 
-    const { error } = await supabase
-      .from("tables")
-      .update({
-        table_number: parseInt(newTableNumber),
-        capacity: parseInt(newTableSeats) || 4,
-      })
-      .eq("id", selectedTable.id);
-
-    if (error) {
-      toast.error("Failed to update table");
-    } else {
+    try {
+      const updates = {
+        number: newTableNumber,
+        seats: parseInt(newTableSeats) || 4,
+      };
+      await updateTable(selectedTable.id!, updates);
+      setTables(tables.map(t => t.id === selectedTable.id ? { ...t, ...updates } : t));
       toast.success("Table updated successfully");
       setIsEditDialogOpen(false);
       setSelectedTable(null);
+    } catch (e) {
+      toast.error("Failed to update table");
     }
   };
 
   const handleDeleteTable = async () => {
     if (!selectedTable) return;
 
-    const { error } = await supabase
-      .from("tables")
-      .delete()
-      .eq("id", selectedTable.id);
-
-    if (error) {
-      toast.error("Failed to delete table");
-    } else {
+    try {
+      await deleteTable(selectedTable.id!);
+      setTables(tables.filter(t => t.id !== selectedTable.id));
       toast.success("Table deleted successfully");
       setIsDeleteDialogOpen(false);
       setSelectedTable(null);
+    } catch (e) {
+      toast.error("Failed to delete table");
     }
   };
 
   const handleToggleLock = async (table: TableRow) => {
-    const { error } = await supabase
-      .from("tables")
-      .update({ is_locked: !table.is_locked })
-      .eq("id", table.id);
-
-    if (error) {
+    try {
+      await updateTable(table.id!, { isLocked: !table.isLocked });
+      setTables(tables.map(t => t.id === table.id ? { ...t, isLocked: !table.isLocked } : t));
+      toast.success(table.isLocked ? "Table unlocked" : "Table locked");
+    } catch (e) {
       toast.error("Failed to update table");
-    } else {
-      toast.success(table.is_locked ? "Table unlocked" : "Table locked");
     }
   };
 
   const getQRCodeUrl = (table: TableRow) => {
-    // Using the specific requested format
-    return `https://quicktap-dine.lovable.app/menu?r=${restaurantId}&t=${table.id}`;
+    // Using the specific requested format or existing logic
+    // We can fallback to logic if qrCodeUrl stored in DB is empty
+    return table.qrCodeUrl || `${window.location.origin}/menu?r=${restaurantId}&t=${table.id}`;
   };
 
   const handleDownloadQR = (table: TableRow) => {
@@ -253,7 +193,7 @@ export const TablesPage = () => {
       const pngFile = canvas.toDataURL("image/png");
 
       const downloadLink = document.createElement("a");
-      downloadLink.download = `table-${table.table_number}-qr.png`;
+      downloadLink.download = `table-${table.number}-qr.png`;
       downloadLink.href = pngFile;
       downloadLink.click();
     };
@@ -321,11 +261,11 @@ export const TablesPage = () => {
         // Add table label
         pdf.setFontSize(14);
         pdf.setFont("helvetica", "bold");
-        pdf.text(`Table ${table.table_number}`, x + qrSize / 2, y + qrSize + 8, { align: "center" });
+        pdf.text(`Table ${table.number}`, x + qrSize / 2, y + qrSize + 8, { align: "center" });
 
         pdf.setFontSize(10);
         pdf.setFont("helvetica", "normal");
-        pdf.text(`${table.capacity || 4} seats`, x + qrSize / 2, y + qrSize + 13, { align: "center" });
+        pdf.text(`${table.seats || 4} seats`, x + qrSize / 2, y + qrSize + 13, { align: "center" });
       }
     }
 
@@ -335,8 +275,8 @@ export const TablesPage = () => {
 
   const openEditDialog = (table: TableRow) => {
     setSelectedTable(table);
-    setNewTableNumber(table.table_number.toString());
-    setNewTableSeats((table.capacity || 4).toString());
+    setNewTableNumber(table.number);
+    setNewTableSeats((table.seats || 4).toString());
     setIsEditDialogOpen(true);
   };
 
@@ -346,7 +286,7 @@ export const TablesPage = () => {
   };
 
   const openDeleteDialog = (table: TableRow) => {
-    if (table.is_locked) {
+    if (table.isLocked) {
       toast.error("Cannot delete table with active order. Please complete or cancel the order first.");
       return;
     }
@@ -362,9 +302,9 @@ export const TablesPage = () => {
     );
   }
 
-  const availableCount = tables.filter(t => t.status === "available" && !t.is_locked).length;
+  const availableCount = tables.filter(t => t.status === "available" && !t.isLocked).length;
   const occupiedCount = tables.filter(t => t.status === "occupied").length;
-  const lockedCount = tables.filter(t => t.is_locked).length;
+  const lockedCount = tables.filter(t => t.isLocked).length;
   const reservedCount = tables.filter(t => t.status === "reserved").length;
 
   return (
@@ -383,6 +323,10 @@ export const TablesPage = () => {
               Download All QR Codes
             </Button>
           )}
+          <Button variant="secondary" onClick={() => navigate('/dashboard/qr-designer')}>
+            <Palette className="h-4 w-4 mr-2" />
+            QR Designer
+          </Button>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button>
@@ -461,7 +405,7 @@ export const TablesPage = () => {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
           {tables.map((table, index) => {
-            const statusConfig = getStatusConfig(table.status, table.is_locked);
+            const statusConfig = getStatusConfig(table.status, table.isLocked);
             return (
               <motion.div
                 key={table.id}
@@ -472,10 +416,10 @@ export const TablesPage = () => {
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h3 className="text-lg font-bold text-foreground">Table {table.table_number}</h3>
+                    <h3 className="text-lg font-bold text-foreground">Table {table.number}</h3>
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
                       <Users className="h-3 w-3" />
-                      {table.capacity || 4} seats
+                      {table.seats || 4} seats
                     </div>
                   </div>
                   <DropdownMenu>
@@ -485,6 +429,10 @@ export const TablesPage = () => {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => navigate(`/dashboard/qr-designer?table=${table.number}`)}>
+                        <Palette className="h-4 w-4 mr-2" />
+                        Customize Design
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => openQRDialog(table)}>
                         <QrCode className="h-4 w-4 mr-2" />
                         View QR Code
@@ -498,7 +446,7 @@ export const TablesPage = () => {
                         Edit Table
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleToggleLock(table)}>
-                        {table.is_locked ? (
+                        {table.isLocked ? (
                           <>
                             <Unlock className="h-4 w-4 mr-2" />
                             Unlock Table
@@ -585,7 +533,7 @@ export const TablesPage = () => {
       <Dialog open={isQRDialogOpen} onOpenChange={setIsQRDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>QR Code - Table {selectedTable?.table_number}</DialogTitle>
+            <DialogTitle>QR Code - Table {selectedTable?.number}</DialogTitle>
             <DialogDescription>
               Customers can scan this code to view the menu and place orders.
             </DialogDescription>
@@ -602,7 +550,7 @@ export const TablesPage = () => {
                   />
                 </div>
                 <p className="mt-4 text-sm text-muted-foreground text-center">
-                  Table {selectedTable.table_number} • {selectedTable.capacity || 4} seats
+                  Table {selectedTable.number} • {selectedTable.seats || 4} seats
                 </p>
                 <p className="text-xs text-muted-foreground mt-1 break-all max-w-full px-4 text-center">
                   {getQRCodeUrl(selectedTable)}
@@ -626,7 +574,7 @@ export const TablesPage = () => {
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Table {selectedTable?.table_number}?</AlertDialogTitle>
+            <AlertDialogTitle>Delete Table {selectedTable?.number}?</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the table and its QR code.
             </AlertDialogDescription>
@@ -642,4 +590,3 @@ export const TablesPage = () => {
     </div>
   );
 };
-

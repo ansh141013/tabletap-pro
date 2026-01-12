@@ -25,28 +25,31 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useWaiterCalls } from "@/hooks/useWaiterCalls";
+import { useAuth } from "@/contexts/AuthContext";
 
 export const WaiterCallsPage = () => {
+  const { userProfile } = useAuth();
   const [activeTab, setActiveTab] = useState("pending");
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
   const [historyFilter, setHistoryFilter] = useState("");
-  const { waiterCalls, isLoading, dismissCall } = useWaiterCalls();
+  const { waiterCalls, isLoading, dismissCall } = useWaiterCalls(userProfile?.restaurantId);
 
   const pendingCalls = waiterCalls.filter(call => call.status === "pending");
   const resolvedCalls = waiterCalls.filter(call => call.status === "resolved");
 
   const filteredCalls = activeTab === "pending" ? pendingCalls : resolvedCalls;
 
-  const isUrgent = (createdAt: string) => {
+  const isUrgent = (createdAt: any) => {
     const now = new Date();
-    const created = new Date(createdAt);
+    const created = createdAt?.toDate ? createdAt.toDate() : new Date(createdAt);
     const minutesElapsed = (now.getTime() - created.getTime()) / (1000 * 60);
     return minutesElapsed >= 5;
   };
 
-  const formatTime = (dateString: string) => {
+  const formatTime = (date: any) => {
     try {
-      return formatDistanceToNow(new Date(dateString), { addSuffix: true });
+      const d = date?.toDate ? date.toDate() : new Date(date);
+      return formatDistanceToNow(d, { addSuffix: true });
     } catch {
       return "Just now";
     }
@@ -77,7 +80,7 @@ export const WaiterCallsPage = () => {
         <div className="bg-card rounded-lg border border-border p-4">
           <p className="text-sm text-muted-foreground">Urgent (5+ min)</p>
           <p className="text-2xl font-bold text-red-600">
-            {pendingCalls.filter(c => isUrgent(c.created_at)).length}
+            {pendingCalls.filter(c => isUrgent(c.createdAt)).length}
           </p>
         </div>
         <div className="bg-card rounded-lg border border-border p-4">
@@ -111,7 +114,7 @@ export const WaiterCallsPage = () => {
             ) : (
               <div className="divide-y divide-border">
                 {filteredCalls.map((call, index) => {
-                  const urgent = isUrgent(call.created_at);
+                  const urgent = isUrgent(call.createdAt);
 
                   return (
                     <motion.div
@@ -139,11 +142,11 @@ export const WaiterCallsPage = () => {
                           </div>
                           <div>
                             <p className="font-semibold text-foreground">
-                              Table {call.table_number}
+                              Table {call.tableNumber}
                             </p>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Clock className="h-3 w-3" />
-                              {formatTime(call.created_at)}
+                              {formatTime(call.createdAt)}
                               {urgent && call.status === "pending" && (
                                 <Badge variant="destructive" className="text-xs">
                                   Urgent
@@ -163,9 +166,9 @@ export const WaiterCallsPage = () => {
                           </Button>
                         )}
 
-                        {call.status === "resolved" && call.resolved_at && (
+                        {call.status === "resolved" && call.resolvedAt && (
                           <span className="text-sm text-muted-foreground">
-                            Resolved {formatTime(call.resolved_at)}
+                            Resolved {formatTime(call.resolvedAt)}
                           </span>
                         )}
                       </div>
@@ -197,13 +200,13 @@ export const WaiterCallsPage = () => {
               </div>
             </div>
             <div className="max-h-[60vh] overflow-y-auto space-y-2">
-              {waiterCalls.filter(c => c.table_number.toString().includes(historyFilter)).length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">
+              {waiterCalls.filter(c => c.tableNumber.toString().includes(historyFilter)).length === 0 ? (
+                <p className="center text-muted-foreground py-8">
                   No matching history found
                 </p>
               ) : (
                 waiterCalls
-                  .filter(c => c.table_number.toString().includes(historyFilter))
+                  .filter(c => c.tableNumber.toString().includes(historyFilter))
                   .map((call) => (
                     <div
                       key={call.id}
@@ -215,9 +218,9 @@ export const WaiterCallsPage = () => {
                           {call.status === 'resolved' ? <Check className="h-4 w-4 text-green-600" /> : <Bell className="h-4 w-4 text-amber-600" />}
                         </div>
                         <div>
-                          <p className="font-medium">Table {call.table_number}</p>
+                          <p className="font-medium">Table {call.tableNumber}</p>
                           <p className="text-sm text-muted-foreground">
-                            {new Date(call.created_at).toLocaleString()}
+                            {formatTime(call.createdAt)}
                           </p>
                         </div>
                       </div>
@@ -225,9 +228,9 @@ export const WaiterCallsPage = () => {
                         <Badge variant={call.status === "resolved" ? "secondary" : "default"}>
                           {call.status}
                         </Badge>
-                        {call.resolved_at && (
+                        {call.resolvedAt && (
                           <p className="text-xs text-muted-foreground mt-1">
-                            Resolved {formatTime(call.resolved_at)}
+                            Resolved {formatTime(call.resolvedAt)}
                           </p>
                         )}
                       </div>

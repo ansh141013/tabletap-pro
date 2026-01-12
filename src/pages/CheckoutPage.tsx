@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useCart } from "@/hooks/useCart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +9,9 @@ import { useToast } from "@/hooks/use-toast";
 import { calculateDistance } from "@/utils/location";
 import { Loader2, MapPin, CheckCircle, AlertTriangle, ShieldCheck, ArrowLeft, ShoppingBag } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { getRestaurant, getTable, createOrder } from "@/services/firebaseService";
 
+// Helper type for Checkout
 interface RestaurantCheckout {
     id: string;
     name: string;
@@ -54,15 +55,11 @@ const CheckoutPage = () => {
 
     // Final Order
     const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+    const [tableNumber, setTableNumber] = useState<number | null>(null);
 
     // Initial Fetch
     useEffect(() => {
-        if (!restaurantId) {
-            return;
-        }
-        // Redirect if cart empty and not loading? 
-        // We'll let the user see empty state or redirect in render if strict.
-        // For now, let's just fetch.
+        if (!restaurantId) return;
 
         if (cart.length === 0 && !loading) {
             navigate(`/menu/${restaurantId}${tableId ? `?table=${tableId}` : ''}`);
@@ -71,39 +68,40 @@ const CheckoutPage = () => {
 
         const fetchData = async () => {
             try {
-                const { data: rData, error: rError } = await supabase
-                    .from("restaurants")
-                    .select("id, name, currency, location_radius, latitude, longitude, abuse_threshold")
-                    .eq("id", restaurantId)
-                    .single();
+                const rData = await getRestaurant(restaurantId);
+                if (!rData) {
+                    toast({ title: "Restaurant not found", variant: "destructive" });
+                    navigate('/');
+                    return;
+                }
 
-                if (rError || !rData) throw new Error("Restaurant not found");
+                // Defaults and mapping
+                const r: RestaurantCheckout = {
+                    id: rData.id!,
+                    name: rData.name,
+                    currency: rData.currency || "USD",
+                    location_radius: rData.location_radius || 100,
+                    latitude: rData.latitude || null,
+                    longitude: rData.longitude || null,
+                    abuse_threshold: rData.abuse_threshold || 3
+                };
 
-                const d = rData as any;
-                // Defaults
-                if (d.location_radius === undefined) d.location_radius = 100;
-                if (d.abuse_threshold === undefined) d.abuse_threshold = 3;
-
-                setRestaurant(d as RestaurantCheckout);
+                setRestaurant(r);
 
                 // Fetch Table Number
                 if (tableId) {
-                    const { data: tData } = await supabase
-                        .from("tables")
-                        .select("table_number")
-                        .eq("id", tableId)
-                        .single();
-                    if (tData) {
-                        // We'll store this in a ref or state if needed, but for now just need it for order
-                        // Let's add it to a state
-                        setTableNumber(tData.table_number);
+                    try {
+                        const tData = await getTable(tableId);
+                        if (tData) {
+                            setTableNumber(tData.tableNumber);
+                        }
+                    } catch (e) {
+                        // ignore or handle
                     }
-                } else {
-                    // If no tableId, maybe redirect? Or pickup? Prompt implies table context.
                 }
 
                 setLoading(false);
-                checkLocation(d as RestaurantCheckout);
+                checkLocation(r);
 
             } catch (err) {
                 console.error(err);
@@ -115,8 +113,6 @@ const CheckoutPage = () => {
         fetchData();
     }, [restaurantId, cart.length]);
 
-    const [tableNumber, setTableNumber] = useState<number | null>(null);
-
     // Location Check
     const checkLocation = (r: RestaurantCheckout) => {
         setIsLocationChecking(true);
@@ -126,7 +122,6 @@ const CheckoutPage = () => {
             // Fail open if no coords setup
             setIsLocationValid(true);
             setIsLocationChecking(false);
-            // toast({ title: "Location check passed (Dev)" });
             return;
         }
 
@@ -176,10 +171,8 @@ const CheckoutPage = () => {
     };
 
     const formatPhone = (val: string) => {
-        // Basic formatting (US style or generic)
         const digits = val.replace(/\D/g, '');
         if (digits.length <= 10) {
-            // (123) 456-7890
             const match = digits.match(/^(\d{0,3})(\d{0,3})(\d{0,4})$/);
             if (match) {
                 return !match[2] ? match[1] : `(${match[1]}) ${match[2]}${match[3] ? `-${match[3]}` : ''}`;
@@ -204,10 +197,8 @@ const CheckoutPage = () => {
         setCheckingAbuse(true);
 
         try {
-            // Mock abuse score calculation or fetch
-            // const { count } = await supabase...
-            // For now, assume good score unless we implement the count logic fully
-            const score = 0; // Mock score
+            // Mock abuse score
+            const score = 0;
 
             if (score >= (restaurant.abuse_threshold || 3)) {
                 setNeedsOtp(true);
@@ -228,7 +219,6 @@ const CheckoutPage = () => {
         setOtpSent(true);
         setOtpTimeLeft(60);
         toast({ title: "OTP Sent", description: "Code sent to " + phone });
-        // In real app, call Supabase Function to send SMS
     };
 
     const verifyOtp = () => {
@@ -246,39 +236,24 @@ const CheckoutPage = () => {
 
         try {
             const orderData = {
-                restaurant_id: restaurantId,
-                table_id: tableId,
-                table_number: tableNumber, // Added
-                customer_name: name,
-                customer_phone: phone,
-                customer_verified: isVerified,
-                order_items: cart, // Supabase handles JSON array automatically if column is jsonb
-                total: totalPrice, // Changed from total_price to total
-                status: "pending",
-                created_at: new Date().toISOString()
+                restaurantId,
+                tableId,
+                tableNumber: tableNumber ? tableNumber.toString() : "0",
+                customerName: name,
+                customerPhone: phone,
+                customerVerified: isVerified,
+                items: cart,
+                total: totalPrice,
+                status: "pending" as const,
+                createdAt: new Date() // Use local date for now, createOrder might use serverTimestamp
             };
 
-            const { data: order, error: orderError } = await supabase
-                .from("orders")
-                .insert(orderData as any) // Casting to any to bypass strict type checking for new columns
-                .select()
-                .single();
-
-            if (orderError) throw orderError;
-
-            // Lock Table
-            await supabase
-                .from("tables")
-                .update({
-                    status: "occupied",
-                    current_order_id: order.id
-                } as any)
-                .eq("id", tableId);
+            const orderId = await createOrder(orderData);
 
             clearCart();
             toast({ title: "Order Placed!", description: "Kitchen has received your order." });
 
-            navigate(`/menu/${restaurantId}?table=${tableId}&order=${order.id}`);
+            navigate(`/menu/${restaurantId}?table=${tableId}&order=${orderId}`);
 
         } catch (e: any) {
             console.error(e);

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -17,69 +17,40 @@ const Login = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // Check if already logged in
+  const { signIn, signInWithGoogle, user, userProfile } = useAuth();
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        checkSetupAndRedirect(session.user.id);
+    if (user) {
+      if (userProfile && !userProfile.restaurantId) {
+        navigate('/owner-setup');
+      } else if (userProfile?.restaurantId) {
+        navigate('/dashboard');
       }
-    });
-  }, []);
-
-  const checkSetupAndRedirect = async (userId: string) => {
-    const { data: restaurant } = await supabase
-      .from('restaurants')
-      .select('setup_complete')
-      .eq('owner_id', userId)
-      .single();
-
-    if (restaurant?.setup_complete) {
-      navigate('/dashboard');
-    } else {
-      navigate('/owner-setup');
     }
-  };
+  }, [user, userProfile, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      toast({
-        title: "Login failed",
-        description: error.message,
-        variant: "destructive",
-      });
+    try {
+      await signIn(email, password);
+      // Navigation handled in useEffect
+    } catch (error: any) {
+      // Handled in AuthContext
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    if (data.user) {
-      await checkSetupAndRedirect(data.user.id);
-    }
-    setIsLoading(false);
   };
 
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-
-    if (error) {
-      toast({
-        title: "Google login failed",
-        description: error.message,
-        variant: "destructive",
-      });
+    try {
+      await signInWithGoogle();
+      // Navigation handled in useEffect
+    } catch (error) {
+      // Handled in AuthContext
+    } finally {
       setIsGoogleLoading(false);
     }
   };
@@ -195,10 +166,10 @@ const Login = () => {
           </div>
 
           {/* Social Login */}
-          <Button 
-            variant="outline" 
-            size="lg" 
-            className="w-full" 
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full"
             onClick={handleGoogleLogin}
             disabled={isGoogleLoading}
           >
@@ -262,7 +233,7 @@ const Login = () => {
             Manage your restaurant<br />with ease
           </h2>
           <p className="text-primary-foreground/80 text-lg max-w-md">
-            Real-time orders, happy customers, and zero chaos. 
+            Real-time orders, happy customers, and zero chaos.
             Join 500+ restaurants already using TableTap.
           </p>
         </motion.div>

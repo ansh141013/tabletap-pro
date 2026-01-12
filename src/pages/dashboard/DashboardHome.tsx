@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useOrders } from "@/hooks/useOrders";
 import { useOrderNotifications } from "@/hooks/useOrderNotifications";
+import { useAuth } from "@/contexts/AuthContext";
 
 const getStatusConfig = (status: string) => {
   switch (status) {
@@ -28,19 +29,23 @@ const getStatusConfig = (status: string) => {
   }
 };
 
-const formatTime = (dateString: string) => {
+const formatTime = (date: any) => {
   try {
-    return formatDistanceToNow(new Date(dateString), { addSuffix: true });
+    let d = date;
+    if (date?.toDate) d = date.toDate();
+    if (!d) return "Just now";
+    return formatDistanceToNow(new Date(d), { addSuffix: true });
   } catch {
     return "Just now";
   }
 };
 
 export const DashboardHome = () => {
-  const { orders, isLoading } = useOrders();
-  
+  const { userProfile } = useAuth();
+  const { orders, isLoading } = useOrders(userProfile?.restaurantId);
+
   // Enable real-time notifications with sound
-  useOrderNotifications();
+  useOrderNotifications(userProfile?.restaurantId || null);
 
   const recentOrders = orders.slice(0, 4);
   const activeOrders = orders.filter(o => ["pending", "accepted", "preparing", "ready"].includes(o.status));
@@ -107,12 +112,12 @@ export const DashboardHome = () => {
                 >
                   <div className="flex items-center gap-4">
                     <div className="flex flex-col">
-                      <span className="font-medium text-foreground">Table {order.table_number}</span>
-                      <span className="text-xs text-muted-foreground">{order.customer_name}</span>
+                      <span className="font-medium text-foreground">Table {order.tableNumber}</span>
+                      <span className="text-xs text-muted-foreground">{order.customerName}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 md:gap-4">
-                    <span className="text-sm text-muted-foreground">{formatTime(order.created_at)}</span>
+                    <span className="text-sm text-muted-foreground">{formatTime(order.createdAt)}</span>
                     <span className={`flex items-center gap-1.5 px-3 py-1 text-sm font-medium rounded-full ${statusConfig.color}`}>
                       <statusConfig.icon className="h-3.5 w-3.5" />
                       {statusConfig.label}

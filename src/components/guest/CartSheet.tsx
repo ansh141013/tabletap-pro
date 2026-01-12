@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CartItem } from "@/pages/GuestMenu";
+import { CartItem } from "@/hooks/useCart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,7 @@ import {
   SheetFooter,
 } from "@/components/ui/sheet";
 import { ShoppingCart, Minus, Plus, Trash2, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { createOrder } from "@/services/firebaseService"; // Use Firebase
 import { useToast } from "@/hooks/use-toast";
 
 interface CartSheetProps {
@@ -38,7 +38,7 @@ export const CartSheet = ({
   cart,
   currency,
   total,
-  restaurantId,
+  restaurantId, // Using string type
   tableId,
   tableNumber,
   onUpdateItem,
@@ -64,50 +64,30 @@ export const CartSheet = ({
       return;
     }
 
-    if (!tableNumber) {
-      toast({
-        title: "Table not found",
-        description: "Please scan the QR code at your table",
-        variant: "destructive",
-      });
+    if (!tableId) { // Need table ID for Firebase Relation
+      toast({ title: "Table not found", description: "Invalid table", variant: "destructive" });
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      // Create the order
-      const { data: order, error: orderError } = await supabase
-        .from("orders")
-        .insert({
-          restaurant_id: restaurantId,
-          table_id: tableId,
-          table_number: tableNumber,
-          customer_name: customerName.trim(),
-          customer_phone: customerPhone.trim() || null,
-          notes: orderNotes.trim() || null,
-          total: total,
-          status: "pending",
-        })
-        .select()
-        .single();
-
-      if (orderError) throw orderError;
-
-      // Create order items
-      const orderItems = cart.map((item) => ({
-        order_id: order.id,
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-        notes: item.notes || null,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from("order_items")
-        .insert(orderItems);
-
-      if (itemsError) throw itemsError;
+      await createOrder({
+        restaurantId,
+        tableId,
+        tableNumber: tableNumber?.toString() || '0',
+        customerName,
+        customerPhone: customerPhone || undefined,
+        // notes: orderNotes, // TODO: Add notes to Order type in firebase.ts
+        total,
+        items: cart.map(i => ({
+          itemId: i.id,
+          name: i.name,
+          price: i.price,
+          quantity: i.quantity,
+          note: i.notes
+        }))
+      });
 
       setOrderPlaced(true);
       onClearCart();
@@ -120,7 +100,6 @@ export const CartSheet = ({
         description: "Your order has been sent to the kitchen",
       });
 
-      // Reset after showing success
       setTimeout(() => {
         setOrderPlaced(false);
         setIsOpen(false);
@@ -138,7 +117,6 @@ export const CartSheet = ({
 
   return (
     <>
-      {/* Fixed bottom cart button */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t z-50">
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
           <SheetTrigger asChild>

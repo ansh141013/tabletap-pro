@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Bell, Loader2, Check } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { createWaiterCall } from "@/services/firebaseService";
 import { useToast } from "@/hooks/use-toast";
 
 interface CallWaiterButtonProps {
   restaurantId: string;
-  tableId: string | null;
-  tableNumber: number;
+  tableId: string;
+  tableNumber: string; // Changed to string to match Firebase Types
 }
 
 export const CallWaiterButton = ({
@@ -23,16 +23,10 @@ export const CallWaiterButton = ({
   const [timeSince, setTimeSince] = useState<string>("");
   const { toast } = useToast();
 
-  // Check rate limit on mount and interval
   useEffect(() => {
     const updateTime = () => {
       if (!lastCallTime) return;
       const diff = Date.now() - lastCallTime;
-      if (diff < 120000) { // 2 mins
-        // Still cooled down? No, diff < 2 mins means RECENT call.
-        // Wait, logic:
-        // If Diff < 2 mins, disabled.
-      }
 
       const minutes = Math.floor(diff / 60000);
       if (minutes > 0 && minutes < 60) {
@@ -49,21 +43,19 @@ export const CallWaiterButton = ({
     return () => clearInterval(interval);
   }, [lastCallTime]);
 
-  const isRateLimited = lastCallTime && (Date.now() - lastCallTime < 120000);
+  const isRateLimited = lastCallTime ? (Date.now() - lastCallTime < 120000) : false;
 
   const handleCallWaiter = async () => {
     if (isRateLimited) return;
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.from("waiter_calls").insert({
-        restaurant_id: restaurantId,
-        table_id: tableId,
-        table_number: tableNumber,
-        status: "pending",
+      await createWaiterCall({
+        restaurantId,
+        tableId,
+        tableNumber,
+        type: 'service'
       });
-
-      if (error) throw error;
 
       const now = Date.now();
       setLastCallTime(now);
@@ -78,7 +70,7 @@ export const CallWaiterButton = ({
     } catch (error: any) {
       toast({
         title: "Failed to call waiter",
-        description: error.message || "Please try again",
+        description: "Please try again",
         variant: "destructive",
       });
     } finally {

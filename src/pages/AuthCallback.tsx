@@ -1,56 +1,30 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
+
+// In Firebase, Auth Callback is usually handled automatically by the SDK or standard redirect flow.
+// However, if we redirect here manually, we should check auth state.
+// Since we used signInWithPopup for Google, this page might not even be hit in the same way Supabase does.
+// But if used for email links or similar, we can keep it as a "Loading/Redirecting" state page.
 
 const AuthCallback = () => {
   const navigate = useNavigate();
+  const { user, userProfile, loading } = useAuth();
 
   useEffect(() => {
-    const handleAuthCallback = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-
-      if (error) {
-        console.error("Auth callback error:", error);
-        navigate('/login');
-        return;
-      }
-
-      if (session?.user) {
-        // Create profile if it doesn't exist
-        const { data: existingProfile } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('user_id', session.user.id)
-          .single();
-
-        if (!existingProfile) {
-          await supabase.from('profiles').insert({
-            user_id: session.user.id,
-            full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
-            email: session.user.email,
-          });
-        }
-
-        // Check if setup is complete
-        const { data: restaurant } = await supabase
-          .from('restaurants')
-          .select('setup_complete')
-          .eq('owner_id', session.user.id)
-          .single();
-
-        if (restaurant?.setup_complete) {
-          navigate('/dashboard');
+    if (!loading) {
+      if (user) {
+        if (userProfile?.restaurantId) {
+          navigate('/dashboard'); // Can refine to check setupComplete if available in profile
         } else {
           navigate('/owner-setup');
         }
       } else {
         navigate('/login');
       }
-    };
-
-    handleAuthCallback();
-  }, [navigate]);
+    }
+  }, [user, userProfile, loading, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-hero">

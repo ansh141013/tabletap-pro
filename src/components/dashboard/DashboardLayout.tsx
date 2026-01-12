@@ -10,6 +10,7 @@ import {
   Bell,
   Menu,
   X,
+  TrendingUp,
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,13 +25,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { useWaiterCalls } from "@/hooks/useWaiterCalls";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/contexts/AuthContext"; // Use new AuthContext
+import { getRestaurant, subscribeToWaiterCalls } from "@/services/firebaseService"; // Use Firebase service
+import { WaiterCall } from "@/types/models";
+import { toast } from "sonner";
 
 const navItems = [
   { icon: ClipboardList, label: "Orders", href: "/dashboard" },
+  { icon: TrendingUp, label: "Analytics", href: "/dashboard/analytics" },
   { icon: MenuSquare, label: "Menu", href: "/dashboard/menu" },
   { icon: Grid3X3, label: "Tables", href: "/dashboard/tables" },
   { icon: Settings, label: "Settings", href: "/dashboard/settings" },
@@ -39,51 +41,39 @@ const navItems = [
 export const DashboardLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { toast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [restaurant, setRestaurant] = useState<{ name: string; logo_url: string | null } | null>(null);
-  const [userEmail, setUserEmail] = useState<string>("");
-  const { waiterCalls } = useWaiterCalls();
 
-  const pendingCalls = waiterCalls.filter(call => call.status === 'pending').length;
-
-  const { session, loading } = useAuth();
+  const { user, userProfile, logout, loading } = useAuth();
+  const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      if (loading) return;
+    // Auth Check
+    if (!loading && !user) {
+      navigate('/owner-login');
+      return;
+    }
 
-      // Dev mode bypass - check if coming from dev skip
-      const isDevMode = sessionStorage.getItem('devMode') === 'true';
-
-      if (!session && !isDevMode) {
-        navigate('/login');
-        return;
-      }
-
-      if (session) {
-        setUserEmail(session.user.email || "");
-
-        // Get restaurant info
-        const { data: restaurantData } = await supabase
-          .from('restaurants')
-          .select('name, logo_url')
-          .eq('owner_id', session.user.id)
-          .single();
-
-        if (restaurantData) {
-          setRestaurant(restaurantData);
+    if (userProfile?.restaurantId) {
+      // Load Restaurant Info
+      getRestaurant(userProfile.restaurantId).then((data) => {
+        if (data) {
+          setRestaurant({ name: data.name, logo_url: null }); // TODO: Add logo_url to Restaurant type
         }
-      } else if (isDevMode) {
-        setUserEmail("dev@demo.com");
-        setRestaurant({ name: "Demo Restaurant", logo_url: null });
-      }
-    };
+      });
 
-    checkAuth();
-  }, [session, loading, navigate]);
+      // Subscribe to Waiter Calls
+      const unsubscribe = subscribeToWaiterCalls(userProfile.restaurantId, (calls) => {
+        setWaiterCalls(calls);
+      });
+      return () => unsubscribe();
+    }
+
+  }, [user, loading, userProfile, navigate]);
+
+  const pendingCalls = waiterCalls.length; // Subscription already filters for pending
 
   const getPageTitle = () => {
     const item = navItems.find((item) => item.href === location.pathname);
@@ -92,29 +82,17 @@ export const DashboardLayout = () => {
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
-
-    // Clear local storage
-    localStorage.clear();
-
-    const { error } = await supabase.auth.signOut();
-
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to sign out. Please try again.",
-        variant: "destructive",
-      });
+    try {
+      await logout();
+      navigate('/owner-login');
+    } catch (error) {
+      toast.error("Failed to sign out");
+    } finally {
       setIsLoggingOut(false);
-      return;
     }
-
-    toast({
-      title: "Signed out",
-      description: "You have been successfully signed out.",
-    });
-
-    navigate('/login');
   };
+
+  if (loading) return <div>Loading...</div>;
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -174,23 +152,15 @@ export const DashboardLayout = () => {
           {/* User */}
           <div className="p-4 border-t border-sidebar-border">
             <div className="flex items-center gap-3 mb-3">
-              {restaurant?.logo_url ? (
-                <img
-                  src={restaurant.logo_url}
-                  alt="Restaurant logo"
-                  className="h-10 w-10 rounded-full object-cover"
-                />
-              ) : (
-                <div className="h-10 w-10 rounded-full bg-gradient-warm flex items-center justify-center text-primary-foreground font-semibold">
-                  {restaurant?.name?.[0] || "R"}
-                </div>
-              )}
+              <div className="h-10 w-10 rounded-full bg-gradient-warm flex items-center justify-center text-primary-foreground font-semibold">
+                {restaurant?.name?.[0] || "R"}
+              </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-sidebar-foreground truncate">
                   {restaurant?.name || "Your Restaurant"}
                 </p>
                 <p className="text-xs text-sidebar-foreground/60 truncate">
-                  {userEmail}
+                  {user?.email}
                 </p>
               </div>
             </div>

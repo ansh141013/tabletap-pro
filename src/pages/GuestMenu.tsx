@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { GuestHeader } from "@/components/guest/GuestHeader";
 import { MenuCategories } from "@/components/guest/MenuCategories";
@@ -12,40 +11,8 @@ import { Loader2 } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { MenuItemDetailModal } from "@/components/guest/MenuItemDetailModal";
 import { FloatingCartButton } from "@/components/guest/FloatingCartButton";
-
-// Exports shared types
-export interface CartItem {
-  id: string;
-  name: string;
-  price: number;
-  quantity: number;
-  notes?: string;
-  image_url?: string | null;
-}
-
-export interface Restaurant {
-  id: string;
-  name: string;
-  logo_url: string | null;
-  currency: string;
-}
-
-export interface Category {
-  id: string;
-  name: string;
-  description: string | null;
-  sort_order: number;
-}
-
-export interface MenuItem {
-  id: string;
-  name: string;
-  description: string | null;
-  price: number;
-  image_url: string | null;
-  category_id: string;
-  available: boolean;
-}
+import { getRestaurant, getTable, getCategories, getMenuItems } from "@/services/firebaseService";
+import { Restaurant, Category, MenuItem } from "@/types/models";
 
 const GuestMenu = () => {
   const { restaurantId } = useParams<{ restaurantId: string }>();
@@ -58,19 +25,16 @@ const GuestMenu = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [tableNumber, setTableNumber] = useState<number | null>(null);
+  const [tableNumber, setTableNumber] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Modal State
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Cart Hook
   const { cart, addToCart, totalItems } = useCart(restaurantId, tableId);
 
-  // Fetch Logic
   useEffect(() => {
     const fetchData = async () => {
       if (!restaurantId) {
@@ -80,56 +44,31 @@ const GuestMenu = () => {
       }
 
       try {
-        // Fetch restaurant
-        const { data: restaurantData, error: restaurantError } = await supabase
-          .from("restaurants")
-          .select("id, name, logo_url, currency")
-          .eq("id", restaurantId)
-          .eq("setup_complete", true)
-          .single();
-
-        if (restaurantError || !restaurantData) {
-          setError("Restaurant not found or not available");
+        const rest = await getRestaurant(restaurantId);
+        if (!rest) {
+          setError("Restaurant not found");
           setLoading(false);
           return;
         }
 
-        setRestaurant(restaurantData);
+        setRestaurant(rest);
 
-        // Fetch table info if tableId provided
         if (tableId) {
-          const { data: tableData } = await supabase
-            .from("tables")
-            .select("table_number")
-            .eq("id", tableId)
-            .eq("restaurant_id", restaurantId)
-            .single();
-
+          const tableData = await getTable(tableId);
           if (tableData) {
-            setTableNumber(tableData.table_number);
+            setTableNumber(tableData.number);
           }
         }
 
-        // Fetch categories
-        const { data: categoriesData } = await supabase
-          .from("categories")
-          .select("*")
-          .eq("restaurant_id", restaurantId)
-          .order("sort_order", { ascending: true });
+        const cats = await getCategories(restaurantId);
+        setCategories(cats);
 
-        setCategories(categoriesData || []);
-        // Don't auto select category, allow "All" (null) to be default
+        const items = await getMenuItems(restaurantId);
+        setMenuItems(items);
 
-        // Fetch menu items
-        const { data: menuData } = await supabase
-          .from("menu_items")
-          .select("*")
-          .eq("restaurant_id", restaurantId)
-          .eq("available", true);
-
-        setMenuItems(menuData || []);
         setLoading(false);
       } catch (err) {
+        console.error(err);
         setError("Failed to load menu");
         setLoading(false);
       }
@@ -138,14 +77,14 @@ const GuestMenu = () => {
     fetchData();
   }, [restaurantId, tableId]);
 
+
   const handleQuickAdd = (item: MenuItem, e: React.MouseEvent) => {
-    // Add animation trigger here if needed (e.g. flying element)
     addToCart({
       id: item.id,
       name: item.name,
       price: item.price,
       quantity: 1,
-      image_url: item.image_url
+      image_url: item.imageUrl
     });
     toast({
       title: "Added to cart",
@@ -161,7 +100,7 @@ const GuestMenu = () => {
       price: item.price,
       quantity: quantity,
       notes: notes,
-      image_url: item.image_url
+      image_url: item.imageUrl
     });
     toast({
       title: "Added to cart",
@@ -171,8 +110,6 @@ const GuestMenu = () => {
 
   const filteredItems = useMemo(() => {
     let items = menuItems;
-
-    // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       items = items.filter(
@@ -181,10 +118,8 @@ const GuestMenu = () => {
           item.description?.toLowerCase().includes(query)
       );
     } else if (selectedCategory) {
-      // Only filter by category if not searching and category is selected
-      items = items.filter((item) => item.category_id === selectedCategory);
+      items = items.filter((item) => item.categoryId === selectedCategory);
     }
-
     return items;
   }, [menuItems, searchQuery, selectedCategory]);
 
@@ -211,14 +146,14 @@ const GuestMenu = () => {
     <div className="min-h-screen bg-background pb-24">
       <GuestHeader
         restaurant={restaurant}
-        tableNumber={tableNumber}
+        tableNumber={tableNumber ? parseInt(tableNumber) : null} // Parse if needed or update GuestHeader
       />
 
       <div className="container max-w-5xl mx-auto px-4 py-4">
         {tableNumber && (
           <OrderTracker
             restaurantId={restaurantId!}
-            tableNumber={tableNumber}
+            tableNumber={parseInt(tableNumber)} // Parse int
             currency={restaurant.currency || "USD"}
           />
         )}
@@ -270,7 +205,7 @@ const GuestMenu = () => {
       {tableNumber && restaurantId && (
         <CallWaiterButton
           restaurantId={restaurantId}
-          tableId={tableId}
+          tableId={tableId!}
           tableNumber={tableNumber}
         />
       )}

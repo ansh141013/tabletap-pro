@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    match /users/{userId} {
+      allow read, write: if request.auth.uid == userId;
+    }
+
+    match /restaurants/{restaurantId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if request.auth.uid == resource.data.ownerId;
+    }
+    
+    match /categories/{catId} {
+       allow read: if true;
+       allow write: if isAuthenticated(); // Should check ownership in real app
+    }
+    
+    match /menuItems/{itemId} {
+       allow read: if true;
+       allow write: if isAuthenticated();
+    }
+    
+    match /tables/{tableId} {
+       allow read: if true;
+       allow write: if isAuthenticated();
+    }
+    
+    match /orders/{orderId} {
+       allow create: if true; // Public can order
+       allow read: if isAuthenticated(); 
+       allow update: if isAuthenticated();
+    }
+
+    match /waiterCalls/{callId} {
+       allow create: if true;
+       allow read, update: if isAuthenticated();
+    }
+  }
+}

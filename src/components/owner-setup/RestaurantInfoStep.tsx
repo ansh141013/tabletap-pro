@@ -6,8 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { RestaurantData } from "@/pages/OwnerSetup";
+import { RestaurantData } from "@/types/models";
 
 interface RestaurantInfoStepProps {
   data: RestaurantData;
@@ -38,73 +37,14 @@ const languages = [
 
 export const RestaurantInfoStep = ({ data, onChange, restaurantId }: RestaurantInfoStepProps) => {
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const { toast } = useToast();
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Stub for Firebase Storage Upload
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Invalid file type",
-        description: "Please upload an image file",
-        variant: "destructive",
-      });
-      return;
+    if (file) {
+      toast({ title: "Logo Upload", description: "Use URL manually for now as Storage is not fully configured in stub", variant: "destructive" });
     }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "File too large",
-        description: "Please upload an image smaller than 5MB",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadProgress(0);
-
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${crypto.randomUUID()}.${fileExt}`;
-    const filePath = `logos/${fileName}`;
-
-    // Simulate progress
-    const progressInterval = setInterval(() => {
-      setUploadProgress((prev) => Math.min(prev + 10, 90));
-    }, 100);
-
-    const { error: uploadError } = await supabase.storage
-      .from('restaurant-logos')
-      .upload(filePath, file);
-
-    clearInterval(progressInterval);
-
-    if (uploadError) {
-      toast({
-        title: "Upload failed",
-        description: uploadError.message,
-        variant: "destructive",
-      });
-      setIsUploading(false);
-      return;
-    }
-
-    const { data: urlData } = supabase.storage
-      .from('restaurant-logos')
-      .getPublicUrl(filePath);
-
-    setUploadProgress(100);
-    onChange({ ...data, logo_url: urlData.publicUrl });
-    setIsUploading(false);
-
-    toast({
-      title: "Logo uploaded!",
-      description: "Your restaurant logo has been uploaded successfully.",
-    });
   };
 
   const removeLogo = () => {
@@ -138,72 +78,15 @@ export const RestaurantInfoStep = ({ data, onChange, restaurantId }: RestaurantI
           />
         </div>
 
-        {/* Logo Upload */}
+        {/* Logo URL Manual Input (Temporary replacement for upload) */}
         <div className="space-y-2 md:col-span-2">
-          <Label>Restaurant Logo</Label>
-          <div className="flex items-start gap-4">
-            {data.logo_url ? (
-              <div className="relative">
-                <img
-                  src={data.logo_url}
-                  alt="Restaurant logo"
-                  className="h-24 w-24 rounded-lg object-cover border"
-                />
-                <button
-                  type="button"
-                  onClick={removeLogo}
-                  className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-md hover:bg-destructive/90"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ) : (
-              <div className="h-24 w-24 rounded-lg border-2 border-dashed border-muted-foreground/25 flex items-center justify-center bg-muted/50">
-                <Upload className="h-8 w-8 text-muted-foreground" />
-              </div>
-            )}
-            <div className="flex-1">
-              <input
-                type="file"
-                id="logo-upload"
-                accept="image/*"
-                onChange={handleLogoUpload}
-                className="hidden"
-                disabled={isUploading}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => document.getElementById('logo-upload')?.click()}
-                disabled={isUploading}
-              >
-                {isUploading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-4 w-4 mr-2" />
-                    Upload Logo
-                  </>
-                )}
-              </Button>
-              <p className="text-xs text-muted-foreground mt-2">
-                PNG, JPG or GIF. Max 5MB.
-              </p>
-              {isUploading && (
-                <div className="mt-2">
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary transition-all duration-300"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          <Label htmlFor="logo">Restaurant Logo URL</Label>
+          <Input
+            id="logo"
+            placeholder="https://example.com/logo.png"
+            value={data.logo_url}
+            onChange={(e) => onChange({ ...data, logo_url: e.target.value })}
+          />
         </div>
 
         {/* Location */}
