@@ -54,7 +54,7 @@ const ContactSection = () => {
 
   return (
     <section id="contact" className="py-20 md:py-32 bg-surface">
-      <div className="container mx-auto px-4">
+      <div className="max-w-7xl mx-auto px-6">
         <ScrollAnimation>
           <div className="text-center mb-16">
             <span className="text-primary font-medium text-sm uppercase tracking-wider">
