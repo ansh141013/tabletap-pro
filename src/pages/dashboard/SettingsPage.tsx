@@ -55,7 +55,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOwnerSettings } from "@/contexts/OwnerContext";
 import { getRestaurant, updateRestaurant, uploadLogo } from "@/services/firebaseService";
+import { getSupportedCurrencies } from "@/utils/currency";
+import { getSupportedLanguages } from "@/utils/language";
 
 // Helper type for Settings - aligned closer to Firebase but keeping UI state structure
 interface RestaurantSettings {
@@ -363,12 +366,12 @@ export const SettingsPage = () => {
                 }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="USD">USD ($)</SelectItem>
-                    <SelectItem value="EUR">EUR (€)</SelectItem>
-                    <SelectItem value="GBP">GBP (£)</SelectItem>
-                    <SelectItem value="INR">INR (₹)</SelectItem>
+                    {getSupportedCurrencies().map(c => (
+                      <SelectItem key={c.code} value={c.code}>{c.code} ({c.symbol}) - {c.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">This affects all price displays in your dashboard and menus.</p>
               </div>
               <div className="space-y-2">
                 <Label>Language</Label>
@@ -377,11 +380,12 @@ export const SettingsPage = () => {
                 }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="es">Spanish</SelectItem>
-                    <SelectItem value="fr">French</SelectItem>
+                    {getSupportedLanguages().map(l => (
+                      <SelectItem key={l.code} value={l.code}>{l.name} ({l.nativeName})</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">Controls translations across your dashboard.</p>
               </div>
             </div>
           </div>

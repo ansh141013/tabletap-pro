@@ -32,7 +32,10 @@ interface CategoriesStepProps {
   restaurantId: string;
 }
 
+import { useAuth } from "@/contexts/AuthContext";
+
 export const CategoriesStep = ({ categories, setCategories, restaurantId }: CategoriesStepProps) => {
+  const { userProfile } = useAuth(); // Get user profile
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpenState] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -71,6 +74,11 @@ export const CategoriesStep = ({ categories, setCategories, restaurantId }: Cate
       return;
     }
 
+    if (!userProfile?.uid) {
+      toast({ title: "Error", description: "You must be logged in", variant: "destructive" });
+      return;
+    }
+
     setIsSaving(true);
 
     if (editingCategory) {
@@ -84,6 +92,7 @@ export const CategoriesStep = ({ categories, setCategories, restaurantId }: Cate
     } else {
       try {
         const ref = await addCategory({
+          ownerId: userProfile.uid,
           restaurantId,
           name,
           displayOrder: categories.length + 1,
@@ -94,6 +103,7 @@ export const CategoriesStep = ({ categories, setCategories, restaurantId }: Cate
           ...categories,
           {
             id: ref.id,
+            ownerId: userProfile.uid,
             restaurantId,
             name,
             description,

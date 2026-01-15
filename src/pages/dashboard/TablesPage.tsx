@@ -13,7 +13,9 @@ import {
   Download,
   FileDown,
   Palette,
+  RefreshCw,
 } from "lucide-react";
+
 import jsPDF from "jspdf";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -45,10 +47,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePlan, useLimit } from "@/contexts/PlanContext";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
 import { Table } from "@/types/models";
-import { addTable, updateTable, deleteTable, getTables } from "@/services/firebaseService";
+import { addTable, updateTable, deleteTable, getTables, regenerateQRCode } from "@/services/firebaseService";
 
 // Map types
 export type TableRow = Table;
@@ -73,6 +76,11 @@ export const TablesPage = () => {
   const { user, userProfile } = useAuth();
   const navigate = useNavigate();
   const [tables, setTables] = useState<TableRow[]>([]);
+
+  // Plan limits check
+  const { limit, reached, remaining, canUpgrade } = useLimit('maxTables', tables.length);
+
+
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -94,14 +102,21 @@ export const TablesPage = () => {
     // If we have restaurantId from userProfile, use it
     if (userProfile?.restaurantId) {
       setRestaurantId(userProfile.restaurantId);
-      getTables(userProfile.restaurantId).then((data) => {
-        setTables(data);
+      // Validate that we have user.uid
+      if (user?.uid) {
+        getTables(user.uid, userProfile.restaurantId).then((data) => {
+          setTables(data);
+          setIsLoading(false);
+        }).catch(err => {
+          console.error(err);
+          // If error is due to missing index, it will be logged.
+          // We can show a friendlier error if it's a permission issue.
+          toast.error("Failed to load tables. Please check your connection.");
+          setIsLoading(false);
+        });
+      } else {
         setIsLoading(false);
-      }).catch(err => {
-        console.error(err);
-        toast.error("Failed to load tables");
-        setIsLoading(false);
-      });
+      }
     } else {
       setIsLoading(false);
     }
@@ -111,14 +126,14 @@ export const TablesPage = () => {
     if (!restaurantId || !newTableNumber) return;
 
     try {
-      const tableData = {
-        restaurantId,
+      const newTable = await addTable({
+        ownerId: user.uid,
+        restaurantId: restaurantId,
         number: newTableNumber,
-        seats: parseInt(newTableSeats) || 4,
-        status: "available" as const,
-        isLocked: false
-      };
-      const newTable = await addTable(tableData);
+        seats: parseInt(newTableSeats),
+        status: "available",
+        isLocked: false,
+      });
       setTables([...tables, newTable]);
       toast.success("Table added successfully");
       setIsAddDialogOpen(false);
@@ -168,6 +183,44 @@ export const TablesPage = () => {
       toast.success(table.isLocked ? "Table unlocked" : "Table locked");
     } catch (e) {
       toast.error("Failed to update table");
+    }
+  };
+
+  const handleRegenerateAllQRs = async () => {
+    if (!window.confirm("Are you sure? This will invalidate all existing physical QR codes!")) return;
+
+    const toastId = toast.loading("Regenerating all QR codes...");
+    try {
+      // Process in parallel
+      const updatedTables = await Promise.all(tables.map(async (table) => {
+        try {
+          const newUrl = await regenerateQRCode(table.id!);
+          return { ...table, qrCodeUrl: newUrl };
+        } catch (e) {
+          console.error(`Failed to regenerate table ${table.number}`, e);
+          return table;
+        }
+      }));
+
+      setTables(updatedTables);
+      toast.dismiss(toastId);
+      toast.success("All QR codes regenerated");
+    } catch (e) {
+      toast.dismiss(toastId);
+      toast.error("Failed to regenerate some QR codes");
+    }
+  };
+
+  const handleRegenerateQR = async (table: TableRow) => {
+    try {
+      const newUrl = await regenerateQRCode(table.id!);
+      setTables(tables.map(t => t.id === table.id ? { ...t, qrCodeUrl: newUrl } : t));
+      if (selectedTable?.id === table.id) {
+        setSelectedTable({ ...table, qrCodeUrl: newUrl });
+      }
+      toast.success("QR Code regenerated");
+    } catch (e) {
+      toast.error("Failed to regenerate QR Code");
     }
   };
 
@@ -315,21 +368,59 @@ export const TablesPage = () => {
           <p className="text-muted-foreground">
             {availableCount} of {tables.length} tables available
           </p>
+          {/* Limit indicator */}
+          <div className="flex items-center gap-2 mt-1">
+            <span className={`text-xs px-2 py-0.5 rounded-full border ${reached
+              ? 'bg-destructive/10 text-destructive border-destructive/20'
+              : 'bg-muted text-muted-foreground border-border'
+              }`}>
+              {tables.length} / {limit === -1 ? '∞' : limit} used
+            </span>
+            {reached && canUpgrade && (
+              <Button
+                variant="link"
+                className="h-auto p-0 text-xs text-primary"
+                onClick={() => navigate('/dashboard/upgrade')}
+              >
+                Upgrade to add more
+              </Button>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           {tables.length > 0 && (
-            <Button variant="outline" onClick={handleDownloadAllQRCodes}>
-              <FileDown className="h-4 w-4 mr-2" />
-              Download All QR Codes
-            </Button>
+            <>
+              <Button variant="outline" onClick={handleDownloadAllQRCodes}>
+                <FileDown className="h-4 w-4 mr-2" />
+                Download All QR Codes
+              </Button>
+              <Button variant="outline" className="text-amber-600 border-amber-200 hover:bg-amber-50" onClick={handleRegenerateAllQRs}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Regenerate All
+              </Button>
+            </>
           )}
           <Button variant="secondary" onClick={() => navigate('/dashboard/qr-designer')}>
             <Palette className="h-4 w-4 mr-2" />
             QR Designer
           </Button>
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
+            if (open && reached) {
+              toast.error(
+                `You reached the ${limit} table limit on your plan.`,
+                {
+                  action: canUpgrade ? {
+                    label: "Upgrade",
+                    onClick: () => navigate('/dashboard/upgrade')
+                  } : undefined
+                }
+              );
+              return;
+            }
+            setIsAddDialogOpen(open);
+          }}>
             <DialogTrigger asChild>
-              <Button>
+              <Button disabled={reached}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Table
               </Button>
@@ -440,6 +531,10 @@ export const TablesPage = () => {
                       <DropdownMenuItem onClick={() => handleDownloadQR(table)}>
                         <Download className="h-4 w-4 mr-2" />
                         Download QR
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleRegenerateQR(table)}>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Regenerate QR
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => openEditDialog(table)}>
                         <Edit className="h-4 w-4 mr-2" />

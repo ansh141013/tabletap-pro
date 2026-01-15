@@ -44,7 +44,7 @@ const createNotificationSound = () => {
   return playSound;
 };
 
-export function useOrderNotifications(restaurantId: string | null, onNewOrder?: (order: Order) => void) {
+export function useOrderNotifications(ownerId: string | null, onNewOrder?: (order: Order) => void) {
   const { toast } = useToast();
   const playSoundRef = useRef<(() => void) | null>(null);
   const hasInteracted = useRef(false);
@@ -80,13 +80,12 @@ export function useOrderNotifications(restaurantId: string | null, onNewOrder?: 
   }, []);
 
   useEffect(() => {
-    if (!restaurantId) return;
+    if (!ownerId) return;
 
-    // Use onSnapshot for realtime updates from Firebase
-    // We want to detect NEW orders, so we might need a timestamp filter or just compare snapshot changes
+    // Use onSnapshot for realtime updates from Firebase - filtered by ownerId
     const q = query(
       collection(db, "orders"),
-      where("restaurantId", "==", restaurantId),
+      where("ownerId", "==", ownerId),
       // orderBy("createdAt", "desc"), // Ensure index exists
       // limit(1) // Or just listen to changes
     );
@@ -128,7 +127,7 @@ export function useOrderNotifications(restaurantId: string | null, onNewOrder?: 
     });
 
     return () => unsubscribe();
-  }, [restaurantId, toast, playNotificationSound, onNewOrder]);
+  }, [ownerId, toast, playNotificationSound, onNewOrder]);
 
   return { playNotificationSound };
 }

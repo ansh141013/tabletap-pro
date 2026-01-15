@@ -7,6 +7,7 @@ import { SettingsPage } from "@/pages/dashboard/SettingsPage";
 import { WaiterCallsPage } from "@/pages/dashboard/WaiterCallsPage";
 import AnalyticsPage from "@/pages/dashboard/AnalyticsPage";
 import QRDesignerPage from "@/pages/dashboard/qr-designer/QRDesignerPage";
+import UpgradePage from "@/pages/dashboard/UpgradePage";
 
 const Dashboard = () => {
   return (
@@ -20,9 +21,11 @@ const Dashboard = () => {
         <Route path="menu" element={<MenuPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="calls" element={<WaiterCallsPage />} />
+        <Route path="upgrade" element={<UpgradePage />} />
       </Route>
     </Routes>
   );
 };
 
 export default Dashboard;
+

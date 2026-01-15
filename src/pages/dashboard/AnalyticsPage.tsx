@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFeature, usePlan } from "@/contexts/PlanContext";
+import { useNavigate } from "react-router-dom";
+import { Lock } from "lucide-react";
 import { format, startOfDay, endOfDay, isSameDay, parseISO, getHours } from "date-fns";
 import { getRestaurant } from "@/services/firebaseService";
 import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
@@ -57,6 +60,32 @@ export const AnalyticsPage = () => {
         to: endOfDay(new Date()),
     });
     const [activeTab, setActiveTab] = useState("overview");
+
+    // Feature Check
+    const hasAnalytics = useFeature("analytics");
+    const hasAdvancedAnalytics = useFeature("advancedAnalytics");
+    const navigate = useNavigate();
+    const { planConfig } = usePlan();
+
+    // If no basic analytics, show upgrade wall immediately
+    if (!hasAnalytics) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6 text-center p-8">
+                <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center">
+                    <Lock className="h-10 w-10 text-muted-foreground" />
+                </div>
+                <div className="space-y-2 max-w-lg">
+                    <h2 className="text-2xl font-bold">Analytics Locked</h2>
+                    <p className="text-muted-foreground">
+                        Upgrade to the Pro plan to unlock detailed insights, revenue tracking, and order trends.
+                    </p>
+                </div>
+                <Button size="lg" onClick={() => navigate('/dashboard/upgrade')}>
+                    View Plans & Upgrade
+                </Button>
+            </div>
+        );
+    }
 
     // Fetch Data
     useEffect(() => {
@@ -444,6 +473,28 @@ export const AnalyticsPage = () => {
                         </Card>
                     </div>
 
+                    {/* Advanced Analytics Upgrade Prompt inside Overview Tab if needed */}
+                    {!hasAdvancedAnalytics && (
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7 mt-8">
+                            <Card className="col-span-full bg-gradient-to-r from-primary/5 via-background to-background border-dashed border-primary/20">
+                                <CardContent className="flex items-center justify-between p-6">
+                                    <div className="flex items-center gap-4">
+                                        <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                                            <TrendingUp className="h-6 w-6 text-primary" />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-semibold text-lg">Unlock Advanced Insights</h3>
+                                            <p className="text-muted-foreground text-sm">
+                                                Get items breakdown, customer retention, and export capabilities with Business plan.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Button onClick={() => navigate('/dashboard/upgrade')}>Upgrade Now</Button>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    )}
+
                     {/* Recent Orders List (Simplified) */}
                     <Card>
                         <CardHeader>
@@ -472,49 +523,72 @@ export const AnalyticsPage = () => {
                 </TabsContent>
 
                 <TabsContent value="items" className="space-y-4">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Top Selling Items</CardTitle>
-                            <CardDescription>Your most popular menu items</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-6">
-                                {topItems.map((item, index) => (
-                                    <div key={item.id} className="flex items-center justify-between">
-                                        <div className="flex items-center gap-4">
-                                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold">
-                                                #{index + 1}
+                    {!hasAdvancedAnalytics ? (
+                        <div className="flex flex-col items-center justify-center py-20 bg-card border rounded-lg border-dashed">
+                            <Lock className="h-10 w-10 text-muted-foreground mb-4" />
+                            <h3 className="text-lg font-semibold mb-2">Advanced Analytics Required</h3>
+                            <p className="text-muted-foreground mb-6 max-w-sm text-center">
+                                Detailed item performance analysis is available on the Business plan.
+                            </p>
+                            <Button onClick={() => navigate('/dashboard/upgrade')}>Upgrade to Unlock</Button>
+                        </div>
+                    ) : (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Top Selling Items</CardTitle>
+                                <CardDescription>Your most popular menu items</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-6">
+                                    {topItems.map((item, index) => (
+                                        <div key={item.id} className="flex items-center justify-between">
+                                            <div className="flex items-center gap-4">
+                                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold">
+                                                    #{index + 1}
+                                                </div>
+                                                <div>
+                                                    <p className="font-medium">{item.name}</p>
+                                                    <p className="text-sm text-muted-foreground">{item.quantity} orders</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="font-medium">{item.name}</p>
-                                                <p className="text-sm text-muted-foreground">{item.quantity} orders</p>
-                                            </div>
+                                            <span className="font-bold">
+                                                ${item.revenue.toFixed(2)}
+                                            </span>
                                         </div>
-                                        <span className="font-bold">
-                                            ${item.revenue.toFixed(2)}
-                                        </span>
-                                    </div>
-                                ))}
-                                {topItems.length === 0 && (
-                                    <div className="text-center py-8 text-muted-foreground">
-                                        No sales data available for this period.
-                                    </div>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
+                                    ))}
+                                    {topItems.length === 0 && (
+                                        <div className="text-center py-8 text-muted-foreground">
+                                            No sales data available for this period.
+                                        </div>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                    )}
                 </TabsContent>
 
                 <TabsContent value="customers" className="space-y-4">
-                    <Card>
-                        <CardHeader><CardTitle>Customer Insights</CardTitle></CardHeader>
-                        <CardContent>
-                            <p className="text-muted-foreground text-sm">Customer tracking requires order history. Feature coming soon...</p>
-                        </CardContent>
-                    </Card>
+                    {!hasAdvancedAnalytics ? (
+                        <div className="flex flex-col items-center justify-center py-20 bg-card border rounded-lg border-dashed">
+                            <Lock className="h-10 w-10 text-muted-foreground mb-4" />
+                            <h3 className="text-lg font-semibold mb-2">Business Plan Required</h3>
+                            <p className="text-muted-foreground mb-6 max-w-sm text-center">
+                                Customer insights and retention metrics are available for high-volume restaurants.
+                            </p>
+                            <Button onClick={() => navigate('/dashboard/upgrade')}>Upgrade to Business</Button>
+                        </div>
+                    ) : (
+                        <Card>
+                            <CardHeader><CardTitle>Customer Insights</CardTitle></CardHeader>
+                            <CardContent>
+                                <p className="text-muted-foreground text-sm">Customer tracking requires order history. Feature coming soon...</p>
+                            </CardContent>
+                        </Card>
+                    )}
                 </TabsContent>
             </Tabs>
-        </div>
+        </div >
     );
 };
 

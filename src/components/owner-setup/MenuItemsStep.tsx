@@ -35,7 +35,10 @@ interface MenuItemsStepProps {
   restaurantId: string;
 }
 
+import { useAuth } from "@/contexts/AuthContext";
+
 export const MenuItemsStep = ({ menuItems, setMenuItems, categories, restaurantId }: MenuItemsStepProps) => {
+  const { userProfile } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
@@ -110,10 +113,16 @@ export const MenuItemsStep = ({ menuItems, setMenuItems, categories, restaurantI
       return;
     }
 
+    if (!userProfile?.uid) {
+      toast({ title: "Error", description: "You must be logged in", variant: "destructive" });
+      return;
+    }
+
     setIsSaving(true);
 
     const itemData = {
       restaurantId,
+      ownerId: userProfile.uid,
       categoryId: formData.categoryId,
       name: formData.name,
       description: formData.description,

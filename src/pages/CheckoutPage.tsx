@@ -1,15 +1,25 @@
 import { useState, useEffect } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { useCart } from "@/hooks/useCart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { calculateDistance } from "@/utils/location";
 import { Loader2, MapPin, CheckCircle, AlertTriangle, ShieldCheck, ArrowLeft, ShoppingBag } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { getRestaurant, getTable, createOrder } from "@/services/firebaseService";
+import {
+    Form,
+    FormControl,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
+} from "@/components/ui/form";
 
 // Helper type for Checkout
 interface RestaurantCheckout {
@@ -21,6 +31,15 @@ interface RestaurantCheckout {
     longitude: number | null;
     abuse_threshold: number;
 }
+
+// Validation Schema
+const checkoutSchema = z.object({
+    name: z.string().min(2, "Name must be at least 2 characters").max(50, "Name must be less than 50 characters").regex(/^[a-zA-Z\s]*$/, "Name can only contain letters and spaces"),
+    phone: z.string().regex(/^\d{10,15}$/, "Valid mobile number required (10-15 digits)"),
+    otp: z.string().optional(),
+});
+
+type CheckoutFormValues = z.infer<typeof checkoutSchema>;
 
 const CheckoutPage = () => {
     const { restaurantId } = useParams<{ restaurantId: string }>();
@@ -40,22 +59,27 @@ const CheckoutPage = () => {
     const [distance, setDistance] = useState<number | null>(null);
     const [locationError, setLocationError] = useState<string | null>(null);
 
-    // Step 2: Customer Form
-    const [name, setName] = useState("");
-    const [phone, setPhone] = useState("");
-    const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
-
     // Step 3: Abuse & OTP
     const [checkingAbuse, setCheckingAbuse] = useState(false);
     const [needsOtp, setNeedsOtp] = useState(false);
     const [otpSent, setOtpSent] = useState(false);
-    const [otp, setOtp] = useState("");
     const [otpTimeLeft, setOtpTimeLeft] = useState(0);
     const [otpVerified, setOtpVerified] = useState(false);
 
     // Final Order
     const [isPlacingOrder, setIsPlacingOrder] = useState(false);
     const [tableNumber, setTableNumber] = useState<number | null>(null);
+
+    // Form
+    const form = useForm<CheckoutFormValues>({
+        resolver: zodResolver(checkoutSchema),
+        defaultValues: {
+            name: "",
+            phone: "",
+            otp: "",
+        },
+        mode: "onChange",
+    });
 
     // Initial Fetch
     useEffect(() => {
@@ -93,7 +117,7 @@ const CheckoutPage = () => {
                     try {
                         const tData = await getTable(tableId);
                         if (tData) {
-                            setTableNumber(tData.tableNumber);
+                            setTableNumber(parseInt(tData.number));
                         }
                     } catch (e) {
                         // ignore or handle
@@ -157,28 +181,9 @@ const CheckoutPage = () => {
         );
     };
 
-    // Field Validation
-    const validateForm = () => {
-        const newErrors: any = {};
-        if (!name.trim() || name.length < 2 || !/^[a-zA-Z\s]*$/.test(name)) {
-            newErrors.name = "Name must be 2-30 characters, letters only";
-        }
-        if (!phone.replace(/\D/g, '').match(/^\d{10,15}$/)) {
-            newErrors.phone = "Valid mobile number required";
-        }
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
-
     const formatPhone = (val: string) => {
         const digits = val.replace(/\D/g, '');
-        if (digits.length <= 10) {
-            const match = digits.match(/^(\d{0,3})(\d{0,3})(\d{0,4})$/);
-            if (match) {
-                return !match[2] ? match[1] : `(${match[1]}) ${match[2]}${match[3] ? `-${match[3]}` : ''}`;
-            }
-        }
-        return val;
+        return digits;
     };
 
     // OTP Timer
@@ -189,13 +194,18 @@ const CheckoutPage = () => {
         }
     }, [otpTimeLeft]);
 
-    // Abuse Check
-    const checkAbuseAndPrepare = async () => {
-        if (!validateForm()) return;
+    // Abuse Check & Prepare
+    const onSubmit = async (data: CheckoutFormValues) => {
         if (!restaurant) return;
+        if (needsOtp && !otpVerified) return; // Should not happen via button state, but safety
 
+        if (needsOtp && otpVerified) {
+            placeOrder(data, true);
+            return;
+        }
+
+        // Start Verification Process
         setCheckingAbuse(true);
-
         try {
             // Mock abuse score
             const score = 0;
@@ -203,9 +213,11 @@ const CheckoutPage = () => {
             if (score >= (restaurant.abuse_threshold || 3)) {
                 setNeedsOtp(true);
                 setOtpSent(false);
+                // Don't place order yet, wait for OTP
+                toast({ title: "Verification Required", description: "Please verify your phone number." });
             } else {
                 setNeedsOtp(false);
-                placeOrder(false); // Direct place if no OTP needed
+                placeOrder(data, false); // Direct place
             }
         } catch (e) {
             console.error(e);
@@ -216,21 +228,29 @@ const CheckoutPage = () => {
     };
 
     const sendOtp = async () => {
+        const phone = form.getValues("phone");
+        if (!phone) {
+            form.setError("phone", { message: "Phone number required" });
+            return;
+        }
         setOtpSent(true);
         setOtpTimeLeft(60);
         toast({ title: "OTP Sent", description: "Code sent to " + phone });
     };
 
     const verifyOtp = () => {
-        if (otp === "123456") { // Mock OTP
+        const otpInput = form.getValues("otp");
+        if (otpInput === "123456") { // Mock OTP
             setOtpVerified(true);
-            placeOrder(true);
+            const data = form.getValues();
+            placeOrder(data, true);
         } else {
+            form.setError("otp", { message: "Invalid OTP" });
             toast({ title: "Invalid OTP", variant: "destructive" });
         }
     };
 
-    const placeOrder = async (isVerified: boolean) => {
+    const placeOrder = async (data: CheckoutFormValues, isVerified: boolean) => {
         if (!restaurantId || !tableId) return;
         setIsPlacingOrder(true);
 
@@ -239,8 +259,8 @@ const CheckoutPage = () => {
                 restaurantId,
                 tableId,
                 tableNumber: tableNumber ? tableNumber.toString() : "0",
-                customerName: name,
-                customerPhone: phone,
+                customerName: data.name,
+                customerPhone: data.phone,
                 customerVerified: isVerified,
                 items: cart,
                 total: totalPrice,
@@ -313,7 +333,7 @@ const CheckoutPage = () => {
                     </CardContent>
                 </Card>
 
-                {/* Step 2: Details */}
+                {/* Step 2: Details Form */}
                 <Card className={!isLocationValid ? "opacity-50 pointer-events-none" : ""}>
                     <CardHeader className="pb-3">
                         <CardTitle className="text-lg flex items-center gap-2">
@@ -321,61 +341,85 @@ const CheckoutPage = () => {
                         </CardTitle>
                         <CardDescription>Used only for order updates.</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label>Name</Label>
-                            <Input
-                                placeholder="Your Name"
-                                value={name}
-                                onChange={e => setName(e.target.value)}
-                                className={errors.name ? "border-destructive" : ""}
-                            />
-                            {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Mobile Number</Label>
-                            <Input
-                                type="tel"
-                                placeholder="(555) 123-4567"
-                                value={phone}
-                                onChange={e => setPhone(formatPhone(e.target.value))}
-                                className={errors.phone ? "border-destructive" : ""}
-                            />
-                            {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
-                        </div>
+                    <CardContent>
+                        <Form {...form}>
+                            <form className="space-y-4">
+                                <FormField
+                                    control={form.control}
+                                    name="name"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Name</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="Your Name" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="phone"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Mobile Number</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    type="tel"
+                                                    placeholder="1234567890"
+                                                    {...field}
+                                                    onChange={(e) => field.onChange(formatPhone(e.target.value))}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
 
-                        {needsOtp && (
-                            <div className="pt-4 border-t space-y-4 animate-in fade-in slide-in-from-top-2">
-                                <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg text-sm text-amber-800 dark:text-amber-200">
-                                    Verification required due to recent activity history.
-                                </div>
+                                {needsOtp && (
+                                    <div className="pt-4 border-t space-y-4 animate-in fade-in slide-in-from-top-2">
+                                        <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg text-sm text-amber-800 dark:text-amber-200">
+                                            Verification required due to recent activity history.
+                                        </div>
 
-                                {!otpSent ? (
-                                    <Button className="w-full" onClick={sendOtp}>Send Verification Code</Button>
-                                ) : (
-                                    <div className="space-y-2">
-                                        <Label>Enter 6-digit Code</Label>
-                                        <div className="flex gap-2">
-                                            <Input
-                                                value={otp}
-                                                onChange={e => setOtp(e.target.value)}
-                                                maxLength={6}
-                                                placeholder="123456"
-                                            />
-                                            <Button onClick={verifyOtp}>Verify</Button>
-                                        </div>
-                                        <div className="flex justify-between text-xs text-muted-foreground">
-                                            <span>Sent to {phone}</span>
-                                            {otpTimeLeft > 0 ? (
-                                                <span>Resend in {otpTimeLeft}s</span>
-                                            ) : (
-                                                <button onClick={sendOtp} className="underline hover:text-primary">Resend Code</button>
-                                            )}
-                                        </div>
+                                        {!otpSent ? (
+                                            <Button type="button" className="w-full" onClick={sendOtp}>Send Verification Code</Button>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                <FormField
+                                                    control={form.control}
+                                                    name="otp"
+                                                    render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel>Enter 6-digit Code</FormLabel>
+                                                            <div className="flex gap-2">
+                                                                <FormControl>
+                                                                    <Input
+                                                                        placeholder="123456"
+                                                                        maxLength={6}
+                                                                        {...field}
+                                                                    />
+                                                                </FormControl>
+                                                                <Button type="button" onClick={verifyOtp}>Verify</Button>
+                                                            </div>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                                <div className="flex justify-between text-xs text-muted-foreground">
+                                                    <span>Sent to {form.getValues("phone")}</span>
+                                                    {otpTimeLeft > 0 ? (
+                                                        <span>Resend in {otpTimeLeft}s</span>
+                                                    ) : (
+                                                        <button type="button" onClick={sendOtp} className="underline hover:text-primary">Resend Code</button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
-                            </div>
-                        )}
+                            </form>
+                        </Form>
                     </CardContent>
                 </Card>
 
@@ -406,15 +450,8 @@ const CheckoutPage = () => {
                 <Button
                     className="w-full h-12 text-lg font-bold"
                     size="lg"
-                    disabled={!isLocationValid || isPlacingOrder || (needsOtp && !otpVerified)}
-                    onClick={() => {
-                        if (needsOtp && !otpVerified) return;
-                        if (needsOtp && otpVerified) {
-                            placeOrder(true);
-                        } else {
-                            checkAbuseAndPrepare();
-                        }
-                    }}
+                    disabled={!isLocationValid || isPlacingOrder || (needsOtp && !otpVerified) || !form.formState.isValid}
+                    onClick={form.handleSubmit(onSubmit)}
                 >
                     {isPlacingOrder ? (
                         <><Loader2 className="animate-spin mr-2" /> Placing Order...</>

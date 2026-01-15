@@ -12,6 +12,8 @@ import {
   X,
   TrendingUp,
   Loader2,
+  Sparkles,
+  Crown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,8 +27,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useAuth } from "@/contexts/AuthContext"; // Use new AuthContext
-import { getRestaurant, subscribeToWaiterCalls } from "@/services/firebaseService"; // Use Firebase service
+import { useAuth } from "@/contexts/AuthContext";
+import { usePlan } from "@/contexts/PlanContext";
+import { getRestaurant, subscribeToWaiterCalls } from "@/services/firebaseService";
 import { WaiterCall } from "@/types/models";
 import { toast } from "sonner";
 
@@ -47,6 +50,7 @@ export const DashboardLayout = () => {
   const [restaurant, setRestaurant] = useState<{ name: string; logo_url: string | null } | null>(null);
 
   const { user, userProfile, logout, loading } = useAuth();
+  const { plan, planConfig, canUpgrade } = usePlan();
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
 
   useEffect(() => {
@@ -99,14 +103,15 @@ export const DashboardLayout = () => {
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
           onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
         />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border transform transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border transform transition-transform duration-200 md:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
       >
         <div className="flex flex-col h-full">
@@ -121,9 +126,9 @@ export const DashboardLayout = () => {
             <button
               onClick={() => setSidebarOpen(false)}
               aria-label="Close sidebar"
-              className="lg:hidden p-1 text-sidebar-foreground/70 hover:text-sidebar-foreground"
+              className="md:hidden p-1 text-sidebar-foreground/70 hover:text-sidebar-foreground"
             >
-              <X className="h-5 w-5" />
+              <X className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
 
@@ -142,11 +147,29 @@ export const DashboardLayout = () => {
                     : "text-sidebar-foreground hover:bg-sidebar-accent/50"
                     }`}
                 >
-                  <item.icon className="h-5 w-5" />
+                  <item.icon className="h-5 w-5" aria-hidden="true" />
                   {item.label}
                 </Link>
               );
             })}
+
+            {/* Upgrade Link - Highlighted */}
+            {canUpgrade && (
+              <Link
+                to="/dashboard/upgrade"
+                onClick={() => setSidebarOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all mt-4 ${location.pathname === '/dashboard/upgrade'
+                    ? 'bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-600 border border-amber-500/30'
+                    : 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 text-amber-600 hover:from-amber-500/20 hover:to-orange-500/20 border border-amber-500/20 hover:border-amber-500/30'
+                  }`}
+              >
+                <Crown className="h-5 w-5" aria-hidden="true" />
+                <span className="flex-1">Upgrade</span>
+                <Badge variant="secondary" className="bg-amber-500/20 text-amber-600 text-xs px-1.5 py-0">
+                  {planConfig.name}
+                </Badge>
+              </Link>
+            )}
           </nav>
 
           {/* User */}
@@ -178,7 +201,7 @@ export const DashboardLayout = () => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 lg:ml-64">
+      <main className="flex-1 md:ml-64">
         {/* Header */}
         <header className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b border-border">
           <div className="flex items-center justify-between px-4 md:px-6 py-4">
@@ -186,9 +209,9 @@ export const DashboardLayout = () => {
               <button
                 onClick={() => setSidebarOpen(true)}
                 aria-label="Open sidebar"
-                className="lg:hidden p-2 text-muted-foreground hover:text-foreground"
+                className="md:hidden p-2 text-muted-foreground hover:text-foreground"
               >
-                <Menu className="h-5 w-5" />
+                <Menu className="h-5 w-5" aria-hidden="true" />
               </button>
               <h1 className="text-xl md:text-2xl font-bold text-foreground">{getPageTitle()}</h1>
             </div>

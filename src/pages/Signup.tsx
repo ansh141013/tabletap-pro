@@ -98,7 +98,7 @@ const Signup = () => {
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 mb-8">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-warm shadow-md">
-              <UtensilsCrossed className="h-5 w-5 text-primary-foreground" />
+              <UtensilsCrossed className="h-5 w-5 text-primary-foreground" aria-hidden="true" />
             </div>
             <span className="text-2xl font-bold text-foreground">TableTap</span>
           </Link>
@@ -118,7 +118,7 @@ const Signup = () => {
             <div className="space-y-2">
               <Label htmlFor="name">Full name</Label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 <Input
                   id="name"
                   type="text"
@@ -135,7 +135,7 @@ const Signup = () => {
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 <Input
                   id="email"
                   type="email"
@@ -168,11 +168,12 @@ const Signup = () => {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
+                    <EyeOff className="h-4 w-4" aria-hidden="true" />
                   ) : (
-                    <Eye className="h-4 w-4" />
+                    <Eye className="h-4 w-4" aria-hidden="true" />
                   )}
                 </button>
               </div>
@@ -190,7 +191,7 @@ const Signup = () => {
               ) : (
                 <>
                   Create account
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </>
               )}
             </Button>

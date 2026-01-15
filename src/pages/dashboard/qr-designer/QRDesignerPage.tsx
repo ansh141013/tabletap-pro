@@ -47,7 +47,7 @@ export const QRDesignerPage = () => {
                 }));
 
                 // Get tables for bulk export
-                const tbls = await getTables(rest.id!);
+                const tbls = await getTables(rest.ownerId, rest.id!);
                 setTables(tbls || []);
 
                 // Pre-fill table number if URL param exists

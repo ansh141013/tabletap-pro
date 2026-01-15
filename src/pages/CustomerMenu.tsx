@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { getRestaurant, getCategories, getMenuItems, createOrder } from '@/services/firebaseService';
-import { Restaurant, Category, MenuItem, Order, OrderItem } from '@/types/firebase';
+import { Restaurant, Category, MenuItem, Order, OrderItem } from '@/types/models';
 import { toast } from 'sonner';
 import { ShoppingCart } from 'lucide-react';
 

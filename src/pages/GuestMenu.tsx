@@ -11,13 +11,13 @@ import { Loader2 } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { MenuItemDetailModal } from "@/components/guest/MenuItemDetailModal";
 import { FloatingCartButton } from "@/components/guest/FloatingCartButton";
-import { getRestaurant, getTable, getCategories, getMenuItems } from "@/services/firebaseService";
+import { getRestaurant, getTable, getPublicCategories, getPublicMenuItems } from "@/services/firebaseService";
 import { Restaurant, Category, MenuItem } from "@/types/models";
 
 const GuestMenu = () => {
-  const { restaurantId } = useParams<{ restaurantId: string }>();
+  const { restaurantId, tableId: paramTableId } = useParams<{ restaurantId: string; tableId?: string }>();
   const [searchParams] = useSearchParams();
-  const tableId = searchParams.get("table");
+  const tableId = paramTableId || searchParams.get("table");
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -56,14 +56,25 @@ const GuestMenu = () => {
         if (tableId) {
           const tableData = await getTable(tableId);
           if (tableData) {
+            // Validate table belongs to this restaurant
+            if (tableData.restaurantId !== restaurantId) {
+              setError("Invalid QR Code: Table does not belong to this restaurant");
+              setLoading(false);
+              return;
+            }
             setTableNumber(tableData.number);
+          } else {
+            // If table ID is present but not found
+            setError("Table not found");
+            setLoading(false);
+            return;
           }
         }
 
-        const cats = await getCategories(restaurantId);
+        const cats = await getPublicCategories(restaurantId);
         setCategories(cats);
 
-        const items = await getMenuItems(restaurantId);
+        const items = await getPublicMenuItems(restaurantId);
         setMenuItems(items);
 
         setLoading(false);
@@ -153,7 +164,7 @@ const GuestMenu = () => {
         {tableNumber && (
           <OrderTracker
             restaurantId={restaurantId!}
-            tableNumber={parseInt(tableNumber)} // Parse int
+            tableNumber={tableNumber}
             currency={restaurant.currency || "USD"}
           />
         )}
@@ -172,9 +183,11 @@ const GuestMenu = () => {
           />
         )}
 
-        {searchQuery && filteredItems.length === 0 ? (
+        {filteredItems.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-muted-foreground">No items match "{searchQuery}"</p>
+            <p className="text-muted-foreground">
+              {searchQuery ? `No items match "${searchQuery}"` : "No menu items available"}
+            </p>
           </div>
         ) : (
           <MenuItemsList

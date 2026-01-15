@@ -1,17 +1,56 @@
+// ==================================
+// OWNER SETTINGS (Global across app)
+// ==================================
+export interface OwnerSettings {
+    currency: string;      // e.g., "USD", "INR", "EUR"
+    language: string;      // e.g., "en", "hi", "es"
+    timezone: string;      // e.g., "Asia/Kolkata", "America/New_York"
+    dateFormat?: string;   // e.g., "DD/MM/YYYY", "MM/DD/YYYY"
+    currencySymbol?: string; // Auto-derived or custom
+}
+
+// ==================================
+// SUBSCRIPTION PLANS
+// ==================================
+export type PlanType = 'free' | 'pro' | 'business';
+export type PlanStatus = 'active' | 'trial' | 'expired' | 'cancelled';
+
+export interface PlanInfo {
+    plan: PlanType;
+    planStatus: PlanStatus;
+    trialEndsAt?: any; // Firestore Timestamp
+    planStartedAt?: any;
+    planExpiresAt?: any;
+}
+
+// ==================================
+// RESTAURANT
+// ==================================
 export interface Restaurant {
     id?: string;
     name: string;
     description?: string;
     address?: string;
     phone?: string;
-    logoUrl?: string; // New field
+    cuisine?: string;
+    logoUrl?: string;
 
-    // Existing fields
+    // Owner & Setup
     ownerId: string;
-    currency: string;
-    language: string;
     setupComplete: boolean;
     createdAt: any; // Firestore Timestamp
+
+    // Subscription Plan
+    plan: PlanType;
+    planStatus: PlanStatus;
+    trialEndsAt?: any;
+    planStartedAt?: any;
+    planExpiresAt?: any;
+
+    // Global Settings (source of truth)
+    currency: string;
+    language: string;
+    timezone: string;
 
     // Additional settings
     opening_hours?: Record<string, { open: string, close: string, isOpen: boolean }>;
@@ -20,6 +59,9 @@ export interface Restaurant {
     latitude?: number;
     longitude?: number;
     abuse_threshold?: number;
+    taxRate?: number;
+
+    // Notifications
     notifications_email?: boolean;
     notifications_sms?: boolean;
     notifications_push?: boolean;
@@ -37,6 +79,7 @@ export interface UserProfile {
 
 export interface Category {
     id?: string;
+    ownerId: string; // Firebase Auth UID of the owner
     restaurantId: string;
     name: string;
     displayOrder: number;
@@ -46,6 +89,7 @@ export interface Category {
 
 export interface MenuItem {
     id?: string;
+    ownerId: string; // Firebase Auth UID of the owner
     restaurantId: string;
     categoryId: string; // Refers to Category ID
     name: string;
@@ -58,6 +102,7 @@ export interface MenuItem {
 
 export interface Table {
     id?: string;
+    ownerId: string; // Firebase Auth UID of the owner
     restaurantId: string;
     number: string;
     seats: number;
@@ -77,6 +122,7 @@ export interface OrderItem {
 
 export interface Order {
     id?: string;
+    ownerId: string; // Firebase Auth UID of the restaurant owner
     restaurantId: string;
     tableId: string;
     tableNumber: string;
@@ -92,6 +138,7 @@ export interface Order {
 
 export interface WaiterCall {
     id?: string;
+    ownerId: string; // Firebase Auth UID of the restaurant owner
     restaurantId: string;
     tableId: string;
     tableNumber: string;

@@ -10,7 +10,7 @@ export type OrderStatus = Order['status'];
 const AUTO_CANCEL_MINUTES = 10;
 const isDevMode = sessionStorage.getItem('devMode') === 'true';
 
-export function useOrders(restaurantId?: string) {
+export function useOrders(ownerId?: string) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingOrderId, setLoadingOrderId] = useState<string | null>(null);
@@ -18,7 +18,7 @@ export function useOrders(restaurantId?: string) {
   const autoCancelIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (!restaurantId || isDevMode) {
+    if (!ownerId || isDevMode) {
       if (isDevMode) {
         setIsLoading(false);
         // Stub mock orders if needed
@@ -26,14 +26,14 @@ export function useOrders(restaurantId?: string) {
       return;
     }
 
-    // Subscribe to orders (Firebase real-time)
-    const unsubscribe = subscribeToOrders(restaurantId, (newOrders) => {
+    // Subscribe to orders (Firebase real-time) - now filtered by ownerId
+    const unsubscribe = subscribeToOrders(ownerId, (newOrders) => {
       setOrders(newOrders);
       setIsLoading(false);
     });
 
     return () => unsubscribe();
-  }, [restaurantId]);
+  }, [ownerId]);
 
   const fetchOrderItems = useCallback(async (orderId: string): Promise<OrderItem[]> => {
     try {

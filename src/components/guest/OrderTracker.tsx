@@ -11,7 +11,7 @@ import { query, collection, where, orderBy, getDocs } from "firebase/firestore";
 
 interface OrderTrackerProps {
   restaurantId: string;
-  tableNumber: number;
+  tableNumber: string | number;
   currency: string;
 }
 
@@ -159,8 +159,10 @@ export const OrderTracker = ({ restaurantId, tableNumber, currency }: OrderTrack
                     </div>
                     <div className="flex items-center h-2 bg-muted rounded-full overflow-hidden">
                       <div
-                        className={`h-full transition-all duration-1000 ${config.color}`}
-                        style={{ width: `${((currentStep + 1) / 4) * 100}%` }}
+                        className={`h-full transition-all duration-1000 ${config.color} ${currentStep === 0 ? "w-1/4" :
+                          currentStep === 1 ? "w-1/2" :
+                            currentStep === 2 ? "w-3/4" : "w-full"
+                          }`}
                       ></div>
                     </div>
                   </div>

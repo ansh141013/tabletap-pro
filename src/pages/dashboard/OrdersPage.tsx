@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,6 +45,7 @@ import { useOrders, OrderStatus, OrderItem } from "@/hooks/useOrders";
 import { useOrderNotifications } from "@/hooks/useOrderNotifications";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOwnerSettings } from "@/contexts/OwnerContext";
 
 const getStatusConfig = (status: OrderStatus) => {
   switch (status) {
@@ -96,14 +98,17 @@ export const OrdersPage = () => {
   const [rejectOrderId, setRejectOrderId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
-  const { userProfile } = useAuth();
-  const { orders, isLoading, loadingOrderId, updateOrderStatus, fetchOrderItems } = useOrders(userProfile?.restaurantId);
-  const { playNotificationSound } = useOrderNotifications(userProfile?.restaurantId || null);
+  const { user, userProfile } = useAuth();
+  const { formatCurrency } = useOwnerSettings();
+  const { orders, isLoading, loadingOrderId, updateOrderStatus, fetchOrderItems } = useOrders(user?.uid);
+  const { playNotificationSound } = useOrderNotifications(user?.uid || null);
   const { toast } = useToast();
 
+
+  const safeOrders = orders || [];
   const filteredOrders = activeTab === "all"
-    ? orders
-    : orders.filter(order => {
+    ? safeOrders
+    : safeOrders.filter(order => {
       if (activeTab === "active") return ["pending", "accepted", "preparing", "ready"].includes(order.status);
       return order.status === activeTab;
     });
@@ -160,7 +165,7 @@ export const OrdersPage = () => {
           { label: "Pending", value: orders.filter(o => o.status === "pending").length, color: "text-amber-600" },
           { label: "Preparing", value: orders.filter(o => o.status === "preparing").length, color: "text-orange-600" },
           { label: "Ready", value: orders.filter(o => o.status === "ready").length, color: "text-green-600" },
-          { label: "Today's Total", value: `$${orders.reduce((acc, o) => acc + Number(o.total || 0), 0).toFixed(2)}`, color: "text-foreground" },
+          { label: "Today's Total", value: formatCurrency(orders.reduce((acc, o) => acc + Number(o.total || 0), 0)), color: "text-foreground" },
         ].map((stat) => (
           <div key={stat.label} className="bg-card rounded-lg border border-border p-4">
             <p className="text-sm text-muted-foreground">{stat.label}</p>
@@ -184,9 +189,25 @@ export const OrdersPage = () => {
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <div className="divide-y divide-border">
               {isLoading ? (
-                <div className="p-8 text-center text-muted-foreground">
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-                  Loading orders...
+                <div className="space-y-4 p-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex flex-col gap-4 border border-border rounded-lg p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-4 w-48" />
+                        </div>
+                        <Skeleton className="h-8 w-24" />
+                      </div>
+                      <div className="flex justify-between items-center pt-2">
+                        <div className="flex gap-2">
+                          <Skeleton className="h-8 w-20" />
+                          <Skeleton className="h-8 w-8" />
+                        </div>
+                        <Skeleton className="h-6 w-16" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : filteredOrders.length === 0 ? (
                 <div className="p-8 text-center text-muted-foreground">
@@ -244,7 +265,7 @@ export const OrdersPage = () => {
                           {/* Actions */}
                           <div className="flex items-center gap-3 flex-wrap">
                             <span className="text-lg font-bold text-foreground">
-                              ${Number(order.total || 0).toFixed(2)}
+                              {formatCurrency(order.total)}
                             </span>
 
                             {order.status === "pending" && (

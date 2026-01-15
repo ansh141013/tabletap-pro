@@ -2,44 +2,76 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // ========================================
+    // HELPER FUNCTIONS
+    // ========================================
+    
     function isAuthenticated() {
       return request.auth != null;
     }
+    
+    // Check if user owns the existing document
+    function isOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.ownerId;
+    }
+    
+    // Check if user is creating a document with their own ownerId
+    function isCreatingOwnData() {
+      return isAuthenticated() && request.auth.uid == request.resource.data.ownerId;
+    }
 
+    // ========================================
+    // COLLECTION RULES
+    // ========================================
+    
+    // Users: Can only read/write their own profile
     match /users/{userId} {
       allow read, write: if request.auth.uid == userId;
     }
-
+    
+    // Restaurants: Public read (for menus), owner-only write
     match /restaurants/{restaurantId} {
       allow read: if true;
-      allow create: if isAuthenticated();
-      allow update: if request.auth.uid == resource.data.ownerId;
+      allow create: if isAuthenticated() && isCreatingOwnData();
+      allow update, delete: if isOwner();
     }
     
-    match /categories/{catId} {
-       allow read: if true;
-       allow write: if isAuthenticated(); // Should check ownership in real app
+    // Categories: Public read, owner-only write
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isCreatingOwnData();
+      allow update, delete: if isOwner();
     }
     
+    // Menu Items: Public read (if available or owner), owner-only write
     match /menuItems/{itemId} {
-       allow read: if true;
-       allow write: if isAuthenticated();
+      // Allow public to read/list available items, or owner to read/list their own
+      allow get: if true;
+      allow list: if resource.data.available == true || (isAuthenticated() && resource.data.ownerId == request.auth.uid);
+      allow create: if isAuthenticated() && isCreatingOwnData();
+      allow update, delete: if isOwner();
     }
     
+    // Tables: Public read (for QR), owner-only write
     match /tables/{tableId} {
-       allow read: if true;
-       allow write: if isAuthenticated();
+      allow read: if true; // Public must read table info to load menu
+      allow create: if isAuthenticated() && isCreatingOwnData();
+      allow update, delete: if isOwner();
     }
     
+    // Orders: Public create, owner-only read/update
     match /orders/{orderId} {
-       allow create: if true; // Public can order
-       allow read: if isAuthenticated(); 
-       allow update: if isAuthenticated();
+      allow create: if true; // Public customers create orders
+      allow read: if isAuthenticated() && isOwner();
+      allow update: if isAuthenticated() && isOwner();
+      allow delete: if false; // Audit trail
     }
-
+    
+    // Waiter Calls (Reception Calls): Public create, owner-only read/update
     match /waiterCalls/{callId} {
-       allow create: if true;
-       allow read, update: if isAuthenticated();
+      allow create: if true;
+      allow read, update: if isAuthenticated() && isOwner();
+      allow delete: if isOwner();
     }
   }
 }

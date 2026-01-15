@@ -12,7 +12,7 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider, db } from '@/config/firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { UserProfile } from '@/types/firebase';
+import { UserProfile } from '@/types/models';
 import { toast } from 'sonner';
 
 interface AuthContextType {
