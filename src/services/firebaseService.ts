@@ -13,10 +13,16 @@ import {
     onSnapshot,
     serverTimestamp,
     orderBy,
-    Timestamp
+    Timestamp,
+    runTransaction,
+    increment
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Restaurant, Table, Category, MenuItem, Order, OrderItem, UserProfile, WaiterCall } from '../types/models';
+
+// Re-export atomic transaction services for convenience
+export { createOrderAtomic, updateOrderStatusAtomic, batchUpdateOrderStatus, executeWithRetry } from './orderService';
+export { updateTableStatusAtomic, lockTableAtomic, unlockTableAtomic, createWaiterCallAtomic, resetAllTablesAtomic, checkTableAvailability } from './tableService';
 
 // ========================================
 // RESTAURANTS
@@ -275,37 +281,43 @@ export const deleteTable = async (id: string) => {
 // ORDERS
 // ========================================
 
+// Import atomic order service for transaction-safe operations
+import { createOrderAtomic, updateOrderStatusAtomic } from './orderService';
+import { CreateOrderInput } from '../types/transactions';
+
 /**
- * Create an order (PUBLIC: customers can create orders)
- * BUT we must validate that the table belongs to the correct restaurant
+ * Create an order using ATOMIC TRANSACTION
+ * 
+ * This uses Firestore transactions to:
+ * 1. Validate table exists and belongs to restaurant
+ * 2. Check table is not already locked (race condition prevention)
+ * 3. Create order and lock table atomically
+ * 
+ * @deprecated Use createOrderAtomic directly for full control over transaction options
  */
 export const createOrder = async (order: Omit<Order, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'ownerId'>) => {
-    // CRITICAL SECURITY CHECK: Validate that tableId belongs to the restaurant
-    const tableDoc = await getDoc(doc(db, 'tables', order.tableId));
-    if (!tableDoc.exists()) {
-        throw new Error('Invalid table ID');
-    }
-
-    const tableData = tableDoc.data() as Table;
-    if (tableData.restaurantId !== order.restaurantId) {
-        throw new Error('Table does not belong to this restaurant');
-    }
-
-    // Use the ownerId from the table to ensure proper ownership
-    const orderData = {
-        ...order,
-        ownerId: tableData.ownerId, // Inherit ownerId from table
-        status: 'pending' as const,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+    const input: CreateOrderInput = {
+        restaurantId: order.restaurantId,
+        tableId: order.tableId,
+        tableNumber: order.tableNumber,
+        items: order.items,
+        total: order.total,
+        customerName: order.customerName,
+        customerPhone: order.customerPhone,
+        notes: order.notes
     };
 
-    const orderRef = await addDoc(collection(db, 'orders'), orderData);
+    const result = await createOrderAtomic(input, {
+        validatePrices: true,
+        checkInventory: false,
+        allowPartialFulfillment: false
+    });
 
-    // Lock Table
-    await updateTableStatus(order.tableId, true, orderRef.id);
+    if (!result.success) {
+        throw new Error(result.error?.message || 'Failed to create order');
+    }
 
-    return orderRef.id;
+    return result.data!.orderId;
 };
 
 /**
@@ -324,15 +336,21 @@ export const subscribeToOrders = (ownerId: string, callback: (orders: Order[]) =
     });
 };
 
+/**
+ * Update order status using ATOMIC TRANSACTION
+ * 
+ * When order is paid/cancelled, this atomically:
+ * 1. Updates order status
+ * 2. Unlocks the associated table
+ * 3. Clears table's currentOrderId
+ * 
+ * @deprecated Use updateOrderStatusAtomic directly for full control
+ */
 export const updateOrderStatus = async (orderId: string, status: Order['status'], tableId?: string) => {
-    await updateDoc(doc(db, 'orders', orderId), {
-        status,
-        updatedAt: serverTimestamp()
-    });
+    const result = await updateOrderStatusAtomic(orderId, status, tableId);
 
-    // Unlock table if order is done
-    if (tableId && (status === 'paid' || status === 'cancelled')) {
-        await updateTableStatus(tableId, false, null as any);
+    if (!result.success) {
+        throw new Error(result.error?.message || 'Failed to update order status');
     }
 };
 
