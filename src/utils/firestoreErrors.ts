@@ -23,13 +23,29 @@ export const handleFirestoreError = (error: any, context: string): FirestoreErro
     console.error(`[Firestore Error] ${context}:`, error);
 
     // Index-related errors (Setup required)
-    if (message.includes('index') || code === 'failed-precondition') {
+    // Check for specific index error indicators
+    const isIndexError = message.includes('index') ||
+        message.includes('The query requires an index') ||
+        (code === 'failed-precondition' && message.includes('index'));
+
+    if (isIndexError) {
         return {
-            userMessage: "We're optimizing your database. This may take a few minutes.",
+            userMessage: "Database indexes are being built. Please wait 1-2 minutes and try again.",
             isIndexError: true,
             isPermissionError: false,
             isNetworkError: false,
             isSetupError: true
+        };
+    }
+
+    // Other failed-precondition errors (not index related)
+    if (code === 'failed-precondition') {
+        return {
+            userMessage: "Query failed. Please refresh the page and try again.",
+            isIndexError: false,
+            isPermissionError: false,
+            isNetworkError: false,
+            isSetupError: false
         };
     }
 
