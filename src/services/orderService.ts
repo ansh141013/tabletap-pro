@@ -37,6 +37,14 @@ import {
     BatchOrderUpdateResult
 } from '../types/transactions';
 
+// Import validation and rate limiting
+import {
+    CreateOrderSchema,
+    UpdateOrderStatusSchema,
+    validateWithSchema
+} from '../utils/validation';
+import { checkRateLimit, sanitizeString, sanitizeObject } from './authService';
+
 // ==================================
 // HELPER FUNCTIONS
 // ==================================

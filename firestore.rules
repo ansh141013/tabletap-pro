@@ -3,14 +3,30 @@ service cloud.firestore {
   match /databases/{database}/documents {
     
     // ========================================
-    // HELPER FUNCTIONS
+    // HELPER FUNCTIONS - Role-Based Access
     // ========================================
     
+    // Check if request is authenticated
     function isAuthenticated() {
       return request.auth != null;
     }
     
-    // Check if user owns the existing document
+    // Get user document data (cached per request)
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    // Check if user has a specific role
+    function hasRole(role) {
+      return isAuthenticated() && getUserData().role == role;
+    }
+    
+    // Check if user has any of the specified roles
+    function hasAnyRole(roles) {
+      return isAuthenticated() && getUserData().role in roles;
+    }
+    
+    // Check if user owns the existing document (via ownerId field)
     function isOwner() {
       return isAuthenticated() && request.auth.uid == resource.data.ownerId;
     }
@@ -19,59 +35,249 @@ service cloud.firestore {
     function isCreatingOwnData() {
       return isAuthenticated() && request.auth.uid == request.resource.data.ownerId;
     }
+    
+    // ========================================
+    // FIELD-LEVEL SECURITY HELPERS
+    // ========================================
+    
+    // Get the fields that changed in an update
+    function changedFields() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+    
+    // Check if any protected fields were modified
+    function protectedFieldsUnchanged(fields) {
+      return !changedFields().hasAny(fields);
+    }
+    
+    // Validate order status transitions (state machine)
+    function isValidOrderStatusTransition(oldStatus, newStatus) {
+      // Define valid transitions
+      return (oldStatus == 'pending' && newStatus in ['accepted', 'cancelled', 'auto_cancelled']) ||
+             (oldStatus == 'accepted' && newStatus in ['preparing', 'cancelled']) ||
+             (oldStatus == 'preparing' && newStatus in ['ready', 'cancelled']) ||
+             (oldStatus == 'ready' && newStatus in ['served', 'cancelled']) ||
+             (oldStatus == 'served' && newStatus in ['paid', 'cancelled']);
+    }
+    
+    // Validate table status transitions
+    function isValidTableStatusTransition(oldStatus, newStatus) {
+      return (oldStatus == 'available' && newStatus in ['occupied', 'reserved']) ||
+             (oldStatus == 'occupied' && newStatus in ['available', 'reserved']) ||
+             (oldStatus == 'reserved' && newStatus in ['available', 'occupied']);
+    }
 
     // ========================================
-    // COLLECTION RULES
+    // USERS COLLECTION
+    // Users can only read/write their own profile
+    // Role field is immutable after creation
     // ========================================
-    
-    // Users: Can only read/write their own profile
     match /users/{userId} {
-      allow read, write: if request.auth.uid == userId;
+      // Users can read their own profile
+      allow read: if request.auth.uid == userId;
+      
+      // Users can create their own profile
+      allow create: if request.auth.uid == userId
+                    && request.resource.data.uid == userId
+                    && request.resource.data.role in ['owner', 'staff']
+                    && request.resource.data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt']);
+      
+      // Users can update their profile BUT cannot change role or uid
+      allow update: if request.auth.uid == userId
+                    && protectedFieldsUnchanged(['uid', 'role', 'createdAt']);
+      
+      // Only admins can delete users (not implemented yet)
+      allow delete: if false;
     }
     
-    // Restaurants: Public read (for menus), owner-only write
+    // ========================================
+    // RESTAURANTS COLLECTION
+    // Public read for menu display
+    // Only owner can modify
+    // ========================================
     match /restaurants/{restaurantId} {
+      // Public read for displaying menus
       allow read: if true;
-      allow create: if isAuthenticated() && isCreatingOwnData();
-      allow update, delete: if isOwner();
-    }
-    
-    // Categories: Public read, owner-only write
-    match /categories/{categoryId} {
-      allow read: if true;
-      allow create: if isAuthenticated() && isCreatingOwnData();
-      allow update, delete: if isOwner();
-    }
-    
-    // Menu Items: Public read (if available or owner), owner-only write
-    match /menuItems/{itemId} {
-      // Allow public to read/list available items, or owner to read/list their own
-      allow get: if true;
-      allow list: if resource.data.available == true || (isAuthenticated() && resource.data.ownerId == request.auth.uid);
-      allow create: if isAuthenticated() && isCreatingOwnData();
-      allow update, delete: if isOwner();
-    }
-    
-    // Tables: Public read (for QR), owner-only write
-    match /tables/{tableId} {
-      allow read: if true; // Public must read table info to load menu
-      allow create: if isAuthenticated() && isCreatingOwnData();
-      allow update, delete: if isOwner();
-    }
-    
-    // Orders: Public create, owner-only read/update
-    match /orders/{orderId} {
-      allow create: if true; // Public customers create orders
-      allow read: if isAuthenticated() && isOwner();
-      allow update: if isAuthenticated() && isOwner();
-      allow delete: if false; // Audit trail
-    }
-    
-    // Waiter Calls (Reception Calls): Public create, owner-only read/update
-    match /waiterCalls/{callId} {
-      allow create: if true;
-      allow read, update: if isAuthenticated() && isOwner();
+      
+      // Only authenticated users can create restaurants with themselves as owner
+      allow create: if isAuthenticated() 
+                    && isCreatingOwnData()
+                    && request.resource.data.keys().hasAll(['ownerId', 'name', 'currency', 'language', 'timezone', 'setupComplete', 'plan', 'planStatus']);
+      
+      // Only owner can update, but cannot change ownerId or createdAt
+      allow update: if isOwner()
+                    && protectedFieldsUnchanged(['ownerId', 'createdAt']);
+      
+      // Only owner can delete
       allow delete: if isOwner();
+    }
+    
+    // ========================================
+    // CATEGORIES COLLECTION
+    // Public read for menu display
+    // Only owner can modify
+    // ========================================
+    match /categories/{categoryId} {
+      // Public read for menu display
+      allow read: if true;
+      
+      // Only authenticated users can create categories with themselves as owner
+      allow create: if isAuthenticated() 
+                    && isCreatingOwnData()
+                    && request.resource.data.keys().hasAll(['ownerId', 'restaurantId', 'name', 'displayOrder']);
+      
+      // Only owner can update, but cannot change ownerId or restaurantId
+      allow update: if isOwner()
+                    && protectedFieldsUnchanged(['ownerId', 'restaurantId']);
+      
+      // Only owner can delete
+      allow delete: if isOwner();
+    }
+    
+    // ========================================
+    // MENU ITEMS COLLECTION
+    // Public read for available items
+    // Only owner can modify
+    // Price validation on create/update
+    // ========================================
+    match /menuItems/{itemId} {
+      // Public can read individual items
+      allow get: if true;
+      
+      // Public can list available items, owner can list all their items
+      allow list: if resource.data.available == true 
+                  || (isAuthenticated() && resource.data.ownerId == request.auth.uid);
+      
+      // Only authenticated users can create menu items
+      allow create: if isAuthenticated() 
+                    && isCreatingOwnData()
+                    && request.resource.data.keys().hasAll(['ownerId', 'restaurantId', 'categoryId', 'name', 'description', 'price', 'available'])
+                    && request.resource.data.price > 0
+                    && request.resource.data.price < 100000; // Max price validation
+      
+      // Only owner can update, but cannot change ownerId or restaurantId
+      // Price must remain positive
+      allow update: if isOwner()
+                    && protectedFieldsUnchanged(['ownerId', 'restaurantId', 'createdAt'])
+                    && request.resource.data.price > 0
+                    && request.resource.data.price < 100000;
+      
+      // Only owner can delete
+      allow delete: if isOwner();
+    }
+    
+    // ========================================
+    // TABLES COLLECTION
+    // Public read for QR code scanning
+    // Only owner can modify structure
+    // Status updates require valid transitions
+    // ========================================
+    match /tables/{tableId} {
+      // Public read for QR code scanning and menu loading
+      allow read: if true;
+      
+      // Only authenticated users can create tables
+      allow create: if isAuthenticated() 
+                    && isCreatingOwnData()
+                    && request.resource.data.keys().hasAll(['ownerId', 'restaurantId', 'number', 'seats', 'isLocked', 'status'])
+                    && request.resource.data.status == 'available'
+                    && request.resource.data.isLocked == false;
+      
+      // Owner can update, but with constraints
+      // If changing status, must be valid transition
+      allow update: if isOwner()
+                    && protectedFieldsUnchanged(['ownerId', 'restaurantId'])
+                    && (
+                      // Either status unchanged
+                      resource.data.status == request.resource.data.status
+                      // Or valid transition
+                      || isValidTableStatusTransition(resource.data.status, request.resource.data.status)
+                    );
+      
+      // Only owner can delete
+      allow delete: if isOwner();
+    }
+    
+    // ========================================
+    // ORDERS COLLECTION
+    // PUBLIC CREATE with strict validation
+    // Only owner can read/update
+    // Immutable fields after creation
+    // Status transitions validated
+    // ========================================
+    match /orders/{orderId} {
+      // Allow public order creation with strict validation
+      allow create: if 
+        // Required fields present
+        request.resource.data.keys().hasAll(['ownerId', 'restaurantId', 'tableId', 'tableNumber', 'items', 'total', 'status', 'createdAt', 'updatedAt'])
+        // Status must be pending on creation
+        && request.resource.data.status == 'pending'
+        // Items array must not be empty
+        && request.resource.data.items.size() > 0
+        // Total must be positive
+        && request.resource.data.total > 0
+        // Validate items have required fields
+        && request.resource.data.items[0].keys().hasAll(['itemId', 'name', 'price', 'quantity']);
+      
+      // Only owner can read orders
+      allow read: if isAuthenticated() && isOwner();
+      
+      // Only owner can update, with strict field protection
+      allow update: if isAuthenticated() 
+                    && isOwner()
+                    // Cannot modify immutable fields
+                    && protectedFieldsUnchanged(['ownerId', 'restaurantId', 'tableId', 'tableNumber', 'items', 'total', 'createdAt', 'customerName', 'customerPhone'])
+                    // Status transition must be valid
+                    && isValidOrderStatusTransition(resource.data.status, request.resource.data.status);
+      
+      // Orders cannot be deleted (audit trail)
+      allow delete: if false;
+    }
+    
+    // ========================================
+    // WAITER CALLS COLLECTION
+    // Public create for customers
+    // Only owner can read/update/resolve
+    // ========================================
+    match /waiterCalls/{callId} {
+      // Allow public waiter call creation with validation
+      allow create: if 
+        request.resource.data.keys().hasAll(['ownerId', 'restaurantId', 'tableId', 'tableNumber', 'type', 'status', 'createdAt'])
+        && request.resource.data.status == 'pending'
+        && request.resource.data.type in ['service', 'bill', 'other'];
+      
+      // Only owner can read calls
+      allow read: if isAuthenticated() && isOwner();
+      
+      // Only owner can update (resolve) calls
+      allow update: if isAuthenticated() 
+                    && isOwner()
+                    // Cannot modify immutable fields
+                    && protectedFieldsUnchanged(['ownerId', 'restaurantId', 'tableId', 'tableNumber', 'type', 'createdAt'])
+                    // Can only change status from pending to resolved
+                    && resource.data.status == 'pending'
+                    && request.resource.data.status == 'resolved';
+      
+      // Only owner can delete
+      allow delete: if isOwner();
+    }
+    
+    // ========================================
+    // ABUSE SCORES COLLECTION (Future)
+    // Track customer abuse patterns
+    // ========================================
+    match /abuseScores/{scoreId} {
+      allow read: if isAuthenticated() && isOwner();
+      allow write: if false; // Only Cloud Functions can write
+    }
+    
+    // ========================================
+    // RATE LIMITS COLLECTION (Future)
+    // Track API usage per user
+    // ========================================
+    match /rateLimits/{limitId} {
+      allow read: if false;
+      allow write: if false; // Only Cloud Functions can write
     }
   }
 }
