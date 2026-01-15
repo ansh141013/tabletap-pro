@@ -108,7 +108,8 @@ export const OrderTracker = ({ restaurantId, tableNumber, currency }: OrderTrack
 
   if (orders.length === 0) return null;
 
-  const getCurrentStep = (status: string) => {
+  const getCurrentStep = (status: string | undefined) => {
+    if (!status) return 0;
     const index = STATUS_STEPS.indexOf(status);
     return index >= 0 ? index : 0;
   };

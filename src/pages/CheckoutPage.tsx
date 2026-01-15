@@ -255,6 +255,15 @@ const CheckoutPage = () => {
         setIsPlacingOrder(true);
 
         try {
+            // Transform cart items to OrderItem format (cart uses 'id', OrderItem uses 'itemId')
+            const orderItems = cart.map(cartItem => ({
+                itemId: cartItem.id,
+                name: cartItem.name,
+                price: cartItem.price,
+                quantity: cartItem.quantity,
+                note: cartItem.notes || undefined
+            }));
+
             const orderData = {
                 restaurantId,
                 tableId,
@@ -262,7 +271,7 @@ const CheckoutPage = () => {
                 customerName: data.name,
                 customerPhone: data.phone,
                 customerVerified: isVerified,
-                items: cart,
+                items: orderItems,
                 total: totalPrice,
                 status: "pending" as const,
                 createdAt: new Date() // Use local date for now, createOrder might use serverTimestamp

@@ -255,6 +255,22 @@ const validateOrderItems = async (
     let totalRequested = 0;
 
     for (const item of items) {
+        // Defensive check for malformed items
+        if (!item || !item.itemId || !item.name) {
+            errors.push(`Invalid item in order: missing required fields`);
+            validations.push({
+                itemId: item?.itemId || 'unknown',
+                name: item?.name || 'Unknown Item',
+                isValid: false,
+                requestedQuantity: item?.quantity || 0,
+                currentPrice: 0,
+                requestedPrice: item?.price || 0,
+                priceChanged: false,
+                errorMessage: 'Item is missing required fields (itemId or name)'
+            });
+            continue;
+        }
+
         totalRequested += item.price * item.quantity;
 
         // If price validation is disabled, skip menu item lookup
