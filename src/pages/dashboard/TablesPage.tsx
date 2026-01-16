@@ -107,11 +107,21 @@ export const TablesPage = () => {
         getTables(user.uid, userProfile.restaurantId).then((data) => {
           setTables(data);
           setIsLoading(false);
-        }).catch(err => {
-          console.error(err);
-          // If error is due to missing index, it will be logged.
-          // We can show a friendlier error if it's a permission issue.
-          toast.error("Failed to load tables. Please check your connection.");
+        }).catch((err: any) => {
+          console.error('Tables fetch error:', err);
+          console.error('Error code:', err.code);
+          console.error('Error message:', err.message);
+
+          // Provide specific error messages
+          if (err.code === 'failed-precondition') {
+            toast.error("Database indexes are being built. Please wait a moment and refresh.");
+          } else if (err.code === 'permission-denied') {
+            toast.error("Permission denied. Please check your account permissions.");
+          } else if (err.code === 'unavailable') {
+            toast.error("Network error. Please check your connection.");
+          } else {
+            toast.error("Failed to load tables. Please try again.");
+          }
           setIsLoading(false);
         });
       } else {
