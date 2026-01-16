@@ -162,16 +162,25 @@ export const createOrderAtomic = async (
             // Create order document reference (we need the ID before writing)
             const orderRef = doc(collection(db, 'orders'));
 
+            // Clean items to ensure no undefined values (Firestore rejects undefined)
+            const cleanedItems = (input.items || []).map(item => ({
+                itemId: item.itemId || '',
+                name: item.name || '',
+                price: item.price || 0,
+                quantity: item.quantity || 1,
+                note: item.note || ''
+            }));
+
             const orderData: Omit<Order, 'id'> = {
-                ownerId: tableData.ownerId, // Inherit from table
-                restaurantId: input.restaurantId,
-                tableId: input.tableId,
-                tableNumber: input.tableNumber,
-                items: input.items,
-                total: options.validatePrices ? validation.totalValidated : input.total,
-                customerName: input.customerName,
-                customerPhone: input.customerPhone,
-                notes: input.notes,
+                ownerId: tableData.ownerId || '', // Inherit from table
+                restaurantId: input.restaurantId || '',
+                tableId: input.tableId || '',
+                tableNumber: input.tableNumber || '0',
+                items: cleanedItems,
+                total: options.validatePrices ? validation.totalValidated : (input.total || 0),
+                customerName: input.customerName || '',
+                customerPhone: input.customerPhone || '',
+                notes: input.notes || '',  // Empty string, NOT undefined - Firestore rejects undefined
                 status: 'pending',
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp()

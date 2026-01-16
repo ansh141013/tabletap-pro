@@ -256,25 +256,26 @@ const CheckoutPage = () => {
 
         try {
             // Transform cart items to OrderItem format (cart uses 'id', OrderItem uses 'itemId')
+            // IMPORTANT: Firestore does NOT accept undefined values - use empty string or null
             const orderItems = cart.map(cartItem => ({
-                itemId: cartItem.id,
-                name: cartItem.name,
-                price: cartItem.price,
-                quantity: cartItem.quantity,
-                note: cartItem.notes || undefined
+                itemId: cartItem.id || '',
+                name: cartItem.name || '',
+                price: cartItem.price || 0,
+                quantity: cartItem.quantity || 1,
+                note: cartItem.notes || ''  // Empty string, NOT undefined
             }));
 
             const orderData = {
-                restaurantId,
-                tableId,
+                restaurantId: restaurantId || '',
+                tableId: tableId || '',
                 tableNumber: tableNumber ? tableNumber.toString() : "0",
-                customerName: data.name,
-                customerPhone: data.phone,
-                customerVerified: isVerified,
+                customerName: data.name?.trim() || '',
+                customerPhone: data.phone?.trim() || '',
+                customerVerified: isVerified || false,
                 items: orderItems,
-                total: totalPrice,
+                total: totalPrice || 0,
                 status: "pending" as const,
-                createdAt: new Date() // Use local date for now, createOrder might use serverTimestamp
+                notes: ''  // Explicitly set to empty string
             };
 
             const orderId = await createOrder(orderData);
